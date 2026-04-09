@@ -204,67 +204,60 @@ export function VideoPlayer({ src, poster, tracks = [], onReady, onError }: Vide
     video.addEventListener("canplay", onCanPlay);
 
     if (Hls.isSupported()) {
-      let audioCodecFallback = false;
+      const hls = new Hls({
+        enableWorker: false,
+        lowLatencyMode: false,
+        maxBufferLength: 60,
+        maxMaxBufferLength: 120,
+        startLevel: -1,
+        abrEwmaDefaultEstimate: 2_000_000,
+        progressive: false,
+      });
 
-      const makeHls = (forceAacAudio: boolean) => {
-        const h = new Hls({
-          enableWorker: false,
-          lowLatencyMode: false,
-          maxBufferLength: 60,
-          maxMaxBufferLength: 120,
-          startLevel: -1,
-          abrEwmaDefaultEstimate: 2_000_000,
-          progressive: false,
-          ...(forceAacAudio ? { audioCodec: "mp4a.40.2" } : {}),
-        });
-        return h;
-      };
+      hlsRef.current = hls;
 
-      const attach = (hls: Hls) => {
-        hlsRef.current = hls;
+      hls.on(Hls.Events.MEDIA_ATTACHED, () => {
+        hls.loadSource(src);
+      });
 
-        hls.on(Hls.Events.MEDIA_ATTACHED, () => {
-          hls.loadSource(src);
-        });
-
-        hls.on(Hls.Events.MANIFEST_PARSED, (_event, data) => {
-          setLevels(data.levels.map((l) => ({ height: l.height, bitrate: l.bitrate })));
-          setCurrentLevel(hls.currentLevel);
-          video.muted = true;
-          video.play().then(() => {
-            setShowUnmute(true);
-            onReady?.(video);
-          }).catch(() => {});
-        });
-
-        hls.on(Hls.Events.LEVEL_SWITCHED, (_event, data) => {
-          setCurrentLevel(data.level);
-        });
-
-        hls.on(Hls.Events.ERROR, (_evtName, data) => {
-          if (data.details === "bufferAddCodecError" && !audioCodecFallback) {
-            audioCodecFallback = true;
-            hls.destroy();
-            const hls2 = makeHls(true);
-            attach(hls2);
-            hls2.attachMedia(video);
-            return;
+      // Drop unsupported audio codecs (e.g. AC-3 on Linux Chrome)
+      // before HLS.js tries to add the MSE source buffer
+      hls.on(Hls.Events.BUFFER_CODECS, (_evtName, data: Record<string, { codec: string; container: string; levelCodec?: string }>) => {
+        if (data.audio) {
+          const mimeType = `${data.audio.container}; codecs="${data.audio.codec}"`;
+          if (!MediaSource.isTypeSupported(mimeType)) {
+            delete data.audio;
           }
-          if (data.fatal) {
-            if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
-              hls.startLoad();
-            } else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
-              hls.recoverMediaError();
-            } else {
-              onError?.(data.type);
-            }
+        }
+      });
+
+      hls.on(Hls.Events.MANIFEST_PARSED, (_event, data) => {
+        setLevels(data.levels.map((l) => ({ height: l.height, bitrate: l.bitrate })));
+        setCurrentLevel(hls.currentLevel);
+        video.muted = true;
+        video.play().then(() => {
+          setShowUnmute(true);
+          onReady?.(video);
+        }).catch(() => {});
+      });
+
+      hls.on(Hls.Events.LEVEL_SWITCHED, (_event, data) => {
+        setCurrentLevel(data.level);
+      });
+
+      hls.on(Hls.Events.ERROR, (_evtName, data) => {
+        if (data.fatal) {
+          if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
+            hls.startLoad();
+          } else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
+            hls.recoverMediaError();
+          } else {
+            onError?.(data.type);
           }
-        });
+        }
+      });
 
-        hls.attachMedia(video);
-      };
-
-      attach(makeHls(false));
+      hls.attachMedia(video);
     } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
       video.src = src;
       if (poster) video.poster = poster;
