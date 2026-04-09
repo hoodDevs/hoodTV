@@ -119,13 +119,14 @@ def _guess_resolution(content: str) -> str:
 
 
 def _build_master_playlist(media_playlist_proxy_url: str, upstream_url: str) -> str:
-    """Wrap a media playlist URL in a synthetic master playlist with codec declarations."""
+    """Wrap a media playlist URL in a synthetic master playlist.
+    No CODECS attribute — let the player auto-detect from segments."""
     bw = _guess_bandwidth(upstream_url)
     res = _guess_resolution(upstream_url)
     return (
         "#EXTM3U\n"
         "#EXT-X-VERSION:3\n"
-        f'#EXT-X-STREAM-INF:BANDWIDTH={bw},CODECS="avc1.4d0020,mp4a.40.2",RESOLUTION={res}\n'
+        f"#EXT-X-STREAM-INF:BANDWIDTH={bw},RESOLUTION={res}\n"
         f"{media_playlist_proxy_url}\n"
     )
 

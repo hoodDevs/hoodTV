@@ -77,7 +77,6 @@
   "dependencies": {
     "@videojs/http-streaming": "^3.17.4",
     "hls.js": "^1.6.15",
-    "shaka-player": "^5.0.9",
     "video.js": "^8.23.7"
   }
 }

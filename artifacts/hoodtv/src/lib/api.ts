@@ -317,10 +317,6 @@ export async function getStreamSources(
   const s = season ?? 1;
   const e = episode ?? 1;
 
-  const vidlinkPath = type === "movie"
-    ? `/api/stream/movie/${tmdbId}`
-    : `/api/stream/tv/${tmdbId}/${s}/${e}`;
-
   const qs = new URLSearchParams();
   if (meta?.title) qs.set("title", meta.title);
   if (meta?.year) qs.set("year", meta.year);
@@ -332,31 +328,19 @@ export async function getStreamSources(
     ? `/api/stream/movie/${tmdbId}/videasy${qStr}`
     : `/api/stream/tv/${tmdbId}/${s}/${e}/videasy${qStr}`;
 
-  const [vidlinkRes, videasyRes] = await Promise.allSettled([
-    fetch(vidlinkPath),
-    fetch(videasyPath),
-  ]);
+  const videasyRes = await fetch(videasyPath);
+  if (!videasyRes.ok) throw new Error("Stream unavailable — no sources returned");
 
-  const vidlinkSources: StreamSource[] = [];
-  const videasySources: StreamSource[] = [];
+  const data: StreamResponse = await videasyRes.json();
+  const videasySources: StreamSource[] = data.sources ?? [];
 
-  if (vidlinkRes.status === "fulfilled" && vidlinkRes.value.ok) {
-    const data: StreamResponse = await vidlinkRes.value.json();
-    vidlinkSources.push(...data.sources.map(s => ({ ...s, name: "VidLink" })));
-  }
-
-  if (videasyRes.status === "fulfilled" && videasyRes.value.ok) {
-    const data: StreamResponse = await videasyRes.value.json();
-    videasySources.push(...data.sources);
-  }
-
-  if (vidlinkSources.length === 0 && videasySources.length === 0) {
+  if (videasySources.length === 0) {
     throw new Error("Stream unavailable — no sources returned");
   }
 
   const videasy720 = videasySources.filter(s => s.name.includes("720"));
   const videasyOther = videasySources.filter(s => !s.name.includes("720"));
-  return [...videasy720, ...videasyOther, ...vidlinkSources];
+  return [...videasy720, ...videasyOther];
 }
 
 export async function getSeasonEpisodes(tmdbId: number, season: number): Promise<Episode[]> {

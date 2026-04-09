@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import shaka from "shaka-player";
+import Hls from "hls.js";
 
 export interface TrackOption {
   language: string;
@@ -15,146 +15,124 @@ interface VideoPlayerProps {
   onError?: (code: number | string) => void;
 }
 
-export function VideoPlayer({ src, sourceType, poster, tracks = [], onReady, onError }: VideoPlayerProps) {
+export function VideoPlayer({ src, poster, tracks = [], onReady, onError }: VideoPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
-  const playerRef = useRef<shaka.Player | null>(null);
+  const hlsRef = useRef<Hls | null>(null);
   const [muted, setMuted] = useState(true);
   const [showUnmute, setShowUnmute] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    shaka.polyfill.installAll();
-
-    const MEDIA_ABORT_MSG = "fetching process for the media resource was aborted";
-
-    const suppressWindowError = (e: ErrorEvent) => {
-      if (e.message?.includes(MEDIA_ABORT_MSG)) {
-        e.preventDefault();
-        e.stopImmediatePropagation();
-      }
-    };
-    const suppressUnhandled = (e: PromiseRejectionEvent) => {
-      const msg = e.reason?.message ?? String(e.reason ?? "");
-      if (msg.includes(MEDIA_ABORT_MSG) || msg.includes("MEDIA_ELEMENT_ERROR")) {
-        e.preventDefault();
-      }
-    };
-
-    window.addEventListener("error", suppressWindowError, true);
-    window.addEventListener("unhandledrejection", suppressUnhandled, true);
-    return () => {
-      window.removeEventListener("error", suppressWindowError, true);
-      window.removeEventListener("unhandledrejection", suppressUnhandled, true);
-    };
-  }, []);
 
   useEffect(() => {
     const video = videoRef.current;
     if (!video || !src) return;
 
     let isActive = true;
+    let recoveryAttempts = 0;
+    const MAX_RECOVERY = 3;
+
     setError(null);
     setShowUnmute(false);
 
-    if (!shaka.Player.isBrowserSupported()) {
-      setError("Your browser does not support this player.");
-      return;
+    if (hlsRef.current) {
+      hlsRef.current.destroy();
+      hlsRef.current = null;
     }
 
-    const prevPlayer = playerRef.current;
-    playerRef.current = null;
-
-    async function run() {
-      if (prevPlayer) {
-        try { await prevPlayer.destroy(); } catch {}
-      }
+    const startPlay = () => {
       if (!isActive) return;
-
-      const player = new shaka.Player();
-      playerRef.current = player;
-
-      player.configure({
-        mediaSource: {
-          forceTransmux: true,
-        },
-        streaming: {
-          bufferingGoal: 60,
-          rebufferingGoal: 2,
-          bufferBehind: 30,
-          retryParameters: {
-            maxAttempts: 5,
-            baseDelay: 1000,
-            backoffFactor: 1.5,
-            fuzzFactor: 0.5,
-            timeout: 30000,
-          },
-          stallEnabled: true,
-          stallThreshold: 3,
-          stallSkip: 0.1,
-        },
-        manifest: {
-          retryParameters: {
-            maxAttempts: 4,
-            baseDelay: 500,
-            backoffFactor: 2,
-            fuzzFactor: 0.5,
-            timeout: 20000,
-          },
-          hls: {
-            ignoreManifestProgramDateTime: true,
-          },
-        },
-        abr: {
-          enabled: true,
-          defaultBandwidthEstimate: 1e6,
-        },
-      });
-
-      player.addEventListener("error", (e: Event) => {
-        if (!isActive) return;
-        const err = (e as CustomEvent<shaka.util.Error>).detail;
-        console.warn("[Shaka] error event", err?.code, err?.message);
-        if (err?.severity === shaka.util.Error.Severity.CRITICAL) {
-          setError(`Playback error (${err.code})`);
-          onError?.(err.code);
-        }
-      });
-
-      try {
-        await player.attach(video!);
-        if (!isActive) return;
-
-        await player.load(src, null, "application/vnd.apple.mpegurl");
-        if (!isActive) return;
-
-        console.log("[Shaka] loaded:", src.slice(0, 80));
-        video!.muted = true;
-        const p = video!.play();
-        if (p) {
-          p.then(() => setShowUnmute(true)).catch((err) => {
-            console.warn("[Shaka] play() blocked:", err?.message ?? err);
-          });
-        }
-        onReady?.(video!);
-      } catch (err: unknown) {
-        if (!isActive) return;
-        const e = err as shaka.util.Error;
-        const code = e?.code ?? "unknown";
-        console.error("[Shaka] load failed:", code, e?.message, "data:", JSON.stringify(e?.data));
-        if (code !== 7000) {
-          setError(`Failed to load stream (${code})`);
-          onError?.(code);
-        }
+      video.muted = true;
+      const p = video.play();
+      if (p) {
+        p.then(() => {
+          if (isActive) setShowUnmute(true);
+        }).catch((err) => {
+          console.warn("[HLS] play() blocked:", err?.message ?? err);
+        });
       }
-    }
+      onReady?.(video);
+    };
 
-    run();
+    const handleFatalError = (detail: string) => {
+      if (!isActive) return;
+      setError(`Stream unavailable (${detail})`);
+      onError?.(detail);
+      hlsRef.current?.destroy();
+      hlsRef.current = null;
+    };
+
+    if (Hls.isSupported()) {
+      const hls = new Hls({
+        enableWorker: true,
+        lowLatencyMode: false,
+        backBufferLength: 30,
+        maxBufferLength: 60,
+        maxMaxBufferLength: 120,
+        maxBufferSize: 60 * 1000 * 1000,
+        startLevel: -1,
+        abrEwmaDefaultEstimate: 1_500_000,
+        fragLoadingMaxRetry: 6,
+        manifestLoadingMaxRetry: 4,
+        levelLoadingMaxRetry: 4,
+        fragLoadingRetryDelay: 1000,
+        manifestLoadingRetryDelay: 500,
+      });
+
+      hlsRef.current = hls;
+
+      hls.on(Hls.Events.MANIFEST_PARSED, () => {
+        console.log("[HLS] manifest parsed, levels:", hls.levels.length);
+        startPlay();
+      });
+
+      hls.on(Hls.Events.ERROR, (_event, data) => {
+        if (!isActive) return;
+        if (!data.fatal) return;
+
+        recoveryAttempts++;
+        if (recoveryAttempts > MAX_RECOVERY) {
+          console.error("[HLS] max recovery attempts reached:", data.details);
+          handleFatalError(data.details);
+          return;
+        }
+
+        switch (data.type) {
+          case Hls.ErrorTypes.NETWORK_ERROR:
+            console.warn("[HLS] fatal network error, trying startLoad:", data.details);
+            hls.startLoad();
+            break;
+          case Hls.ErrorTypes.MEDIA_ERROR:
+            console.warn("[HLS] fatal media error, trying recoverMediaError:", data.details);
+            hls.recoverMediaError();
+            break;
+          default:
+            console.error("[HLS] unrecoverable error:", data.details);
+            handleFatalError(data.details);
+            break;
+        }
+      });
+
+      hls.loadSource(src);
+      hls.attachMedia(video);
+    } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
+      video.src = src;
+      video.addEventListener("loadedmetadata", startPlay, { once: true });
+      video.addEventListener("error", () => {
+        if (!isActive) return;
+        const code = video.error?.code ?? "unknown";
+        handleFatalError(String(code));
+      }, { once: true });
+    } else {
+      handleFatalError("unsupported");
+    }
 
     return () => {
       isActive = false;
       try { video.pause(); } catch {}
-      playerRef.current?.destroy().catch(() => {});
-      playerRef.current = null;
+      if (hlsRef.current) {
+        hlsRef.current.destroy();
+        hlsRef.current = null;
+      }
+      video.src = "";
     };
   }, [src]);
 
@@ -194,9 +172,12 @@ export function VideoPlayer({ src, sourceType, poster, tracks = [], onReady, onE
         playsInline
         poster={poster}
         preload="none"
-      />
+      >
+        {tracks.map((t) => (
+          <track key={t.url} kind="subtitles" src={t.url} srcLang={t.language} label={t.language} />
+        ))}
+      </video>
 
-      {/* Unmute overlay */}
       {showUnmute && muted && (
         <button
           className="unmute-btn"
@@ -228,7 +209,6 @@ export function VideoPlayer({ src, sourceType, poster, tracks = [], onReady, onE
         </button>
       )}
 
-      {/* In-player error */}
       {error && (
         <div style={{
           position: "absolute",

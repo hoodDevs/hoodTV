@@ -3,7 +3,7 @@ import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from routers import health, vidsrc, proxy, videasy
+from routers import health, proxy, videasy
 
 app = FastAPI(title="hoodTV API", version="1.0.0")
 
@@ -22,7 +22,6 @@ app.add_middleware(
 )
 
 app.include_router(health.router, prefix="/api")
-app.include_router(vidsrc.router, prefix="/api")
 app.include_router(videasy.router, prefix="/api")
 app.include_router(proxy.router, prefix="/api")
 
