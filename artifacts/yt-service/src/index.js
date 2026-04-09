@@ -17,7 +17,87 @@ async function getYT() {
   return yt;
 }
 
-// Search YouTube for a movie or TV episode and return matching video candidates
+function mapVideo(v) {
+  return {
+    id: v.id,
+    title: v.title?.text ?? v.title ?? "",
+    author: v.author?.name ?? v.short_byline_text?.text ?? "",
+    authorId: v.author?.id ?? "",
+    duration: v.duration?.text ?? "",
+    durationSeconds: v.duration?.seconds ?? 0,
+    thumbnail: v.best_thumbnail?.url ?? v.thumbnails?.[0]?.url ?? "",
+    views: v.view_count?.text ?? v.short_view_count?.text ?? "",
+    publishedAt: v.published?.text ?? "",
+  };
+}
+
+// Browse / search music videos
+// GET /api/yt/videos?q=...&limit=24
+app.get("/api/yt/videos", async (req, res) => {
+  try {
+    const { q, limit = "24" } = req.query;
+    const query = q?.trim() || "official music video 2024";
+    const innertube = await getYT();
+    const results = await innertube.search(query, { type: "video" });
+    const videos = (results.videos || [])
+      .filter((v) => v.type === "Video" && v.id)
+      .slice(0, parseInt(limit, 10))
+      .map(mapVideo);
+    res.json({ query, videos });
+  } catch (err) {
+    console.error("/api/yt/videos error:", err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Full video info + related videos
+// GET /api/yt/info/:videoId
+app.get("/api/yt/info/:videoId", async (req, res) => {
+  try {
+    const { videoId } = req.params;
+    const innertube = await getYT();
+    const info = await innertube.getInfo(videoId);
+
+    const basic = info.basic_info ?? {};
+    const related = [];
+
+    // walk watch_next_feed for related videos
+    const feed = info.watch_next_feed ?? [];
+    for (const item of feed) {
+      if ((item.type === "CompactVideo" || item.type === "Video") && item.id && related.length < 20) {
+        related.push({
+          id: item.id,
+          title: item.title?.text ?? "",
+          author: item.author?.name ?? item.short_byline_text?.text ?? "",
+          duration: item.duration?.text ?? "",
+          thumbnail: item.best_thumbnail?.url ?? item.thumbnails?.[0]?.url ?? "",
+          views: item.view_count?.text ?? item.short_view_count?.text ?? "",
+          publishedAt: item.published?.text ?? "",
+        });
+      }
+    }
+
+    res.json({
+      id: videoId,
+      title: basic.title ?? "",
+      author: basic.channel?.name ?? basic.author ?? "",
+      authorId: basic.channel?.id ?? "",
+      views: basic.view_count ? `${basic.view_count.toLocaleString()} views` : "",
+      publishedAt: basic.start_timestamp ?? "",
+      description: basic.short_description ?? "",
+      keywords: basic.keywords ?? [],
+      thumbnail: basic.thumbnail?.[0]?.url ?? "",
+      duration: basic.duration ?? 0,
+      related,
+    });
+  } catch (err) {
+    console.error("/api/yt/info error:", err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Search for music video (used by TrackRow MV button)
+// GET /api/yt/search?title=...&type=music|tv|movie
 app.get("/api/yt/search", async (req, res) => {
   try {
     const { title, type, year, season, episode } = req.query;
@@ -34,68 +114,14 @@ app.get("/api/yt/search", async (req, res) => {
 
     const innertube = await getYT();
     const results = await innertube.search(query, { type: "video" });
-
     const videos = (results.videos || [])
       .filter((v) => v.type === "Video" && v.id)
       .slice(0, 8)
-      .map((v) => ({
-        id: v.id,
-        title: v.title?.text ?? "",
-        author: v.author?.name ?? "",
-        duration: v.duration?.text ?? "",
-        thumbnail: v.best_thumbnail?.url ?? "",
-        views: v.view_count?.text ?? "",
-      }));
+      .map(mapVideo);
 
     res.json({ query, videos });
   } catch (err) {
     console.error("/api/yt/search error:", err.message);
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// Get stream URLs for a specific video ID
-app.get("/api/yt/stream/:videoId", async (req, res) => {
-  try {
-    const { videoId } = req.params;
-    if (!videoId) return res.status(400).json({ error: "videoId required" });
-
-    const innertube = await getYT();
-    const info = await innertube.getBasicInfo(videoId, "WEB");
-
-    if (!info.streaming_data) {
-      return res.status(404).json({ error: "No streaming data available" });
-    }
-
-    // Combined formats (video + audio in one stream, max 720p)
-    const combined = (info.streaming_data.formats ?? [])
-      .filter((f) => f.url && f.mime_type?.startsWith("video/"))
-      .sort((a, b) => (b.quality_label?.includes("720") ? 1 : 0) - (a.quality_label?.includes("720") ? 1 : 0));
-
-    // Adaptive video-only for high-res reference
-    const adaptive = (info.streaming_data.adaptive_formats ?? [])
-      .filter((f) => f.url && f.mime_type?.startsWith("video/mp4") && f.audio_quality === undefined)
-      .sort((a, b) => (b.bitrate ?? 0) - (a.bitrate ?? 0));
-
-    const formats = combined.map((f) => ({
-      url: f.url,
-      quality: f.quality_label ?? f.quality ?? "unknown",
-      mime_type: f.mime_type,
-      has_audio: true,
-      itag: f.itag,
-    }));
-
-    if (formats.length === 0) {
-      return res.status(404).json({ error: "No usable stream formats found" });
-    }
-
-    const title = info.basic_info?.title ?? "";
-    const author = info.basic_info?.channel?.name ?? "";
-    const thumbnail = info.basic_info?.thumbnail?.[0]?.url ?? "";
-
-    res.json({ videoId, title, author, thumbnail, formats });
-  } catch (err) {
-    console.error("/api/yt/stream error:", err.message);
     res.status(500).json({ error: err.message });
   }
 });
@@ -105,9 +131,8 @@ app.get("/api/yt/health", (_req, res) => {
   res.json({ status: "ok", yt_ready: yt !== null });
 });
 
-const port = parseInt(process.env.PORT ?? "8070");
+const port = parseInt(process.env.PORT ?? "8099");
 app.listen(port, "0.0.0.0", () => {
   console.log(`[yt-service] listening on port ${port}`);
-  // Warm up InnerTube connection in background
   getYT().then(() => console.log("[yt-service] InnerTube ready")).catch(console.error);
 });

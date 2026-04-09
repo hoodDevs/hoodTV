@@ -1,8 +1,9 @@
 import { useEffect, useState, useRef } from "react";
-import { Search, Play, ChevronRight } from "lucide-react";
+import { Search, Play, ChevronRight, MonitorPlay } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { searchTracks, getChartTracks, GENRES, artworkUrl, type Track } from "../lib/musicApi";
+import type { YtVideo } from "./MusicVideosPage";
 import { useMusicPlayer } from "../context/MusicPlayerContext";
 import { TrackRow } from "../components/TrackRow";
 import { AlbumCard } from "../components/AlbumCard";
@@ -125,6 +126,61 @@ function HScrollRow({ children }: { children: React.ReactNode }) {
     >
       <style>{`.hscroll::-webkit-scrollbar { display: none; }`}</style>
       {children}
+    </div>
+  );
+}
+
+function MusicVideosPreview() {
+  const [, navigate] = useLocation();
+  const { data } = useQuery<{ videos: YtVideo[] }>({
+    queryKey: ["yt-videos-preview"],
+    queryFn: () => fetch("/api/yt/videos?q=official+music+video+2024&limit=8").then((r) => r.json()),
+    staleTime: 10 * 60 * 1000,
+    retry: false,
+  });
+
+  const videos = data?.videos ?? [];
+  if (!videos.length) return null;
+
+  return (
+    <div style={{ marginBottom: 40 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <MonitorPlay size={18} color="#7F77DD" />
+          <h2 style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 22, color: "#f0f0f0", letterSpacing: "0.04em" }}>
+            Music Videos
+          </h2>
+        </div>
+        <button
+          onClick={() => navigate("/music/videos")}
+          style={{ background: "none", border: "none", cursor: "pointer", color: "#7F77DD", fontSize: 12.5, display: "flex", alignItems: "center", gap: 2 }}
+        >
+          See all <ChevronRight size={14} />
+        </button>
+      </div>
+
+      <div style={{ display: "flex", gap: 16, overflowX: "auto", paddingBottom: 8, scrollbarWidth: "none" }}>
+        {videos.map((v) => (
+          <div
+            key={v.id}
+            onClick={() => navigate(`/music/videos/${v.id}`)}
+            style={{ flexShrink: 0, width: 220, cursor: "pointer" }}
+            className="mv-preview-card"
+          >
+            <div style={{ position: "relative", paddingTop: "56.25%", borderRadius: 8, overflow: "hidden", background: "#111", marginBottom: 8 }}>
+              <img src={v.thumbnail} alt={v.title} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} />
+              {v.duration && (
+                <span style={{ position: "absolute", bottom: 5, right: 5, background: "rgba(0,0,0,0.85)", color: "#fff", fontSize: 10, fontWeight: 700, padding: "2px 5px", borderRadius: 3, fontFamily: "monospace" }}>
+                  {v.duration}
+                </span>
+              )}
+            </div>
+            <div style={{ fontSize: 12.5, fontWeight: 500, color: "#e0e0e0", lineHeight: 1.3, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden", marginBottom: 3 }}>{v.title}</div>
+            <div style={{ fontSize: 11.5, color: "#555" }}>{v.author}</div>
+          </div>
+        ))}
+      </div>
+      <style>{`.mv-preview-card:hover img { filter: brightness(1.1); } .mv-preview-card img { transition: filter 0.2s; }`}</style>
     </div>
   );
 }
@@ -295,6 +351,9 @@ export function MusicHomePage() {
               ))}
             </HScrollRow>
           </Section>
+
+          {/* Music Videos */}
+          <MusicVideosPreview />
         </>
       )}
 

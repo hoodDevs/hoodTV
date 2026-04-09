@@ -17,6 +17,8 @@ import { MusicHomePage } from "@/music/pages/MusicHomePage";
 import { ArtistPage } from "@/music/pages/ArtistPage";
 import { AlbumPage } from "@/music/pages/AlbumPage";
 import { GenrePage } from "@/music/pages/GenrePage";
+import { MusicVideosPage } from "@/music/pages/MusicVideosPage";
+import { MusicVideoWatchPage } from "@/music/pages/MusicVideoWatchPage";
 
 const queryClient = new QueryClient();
 
@@ -54,6 +56,8 @@ function Router() {
         <Route path="/watch/:id" component={WatchPage} />
         <Route path="/mylist" component={MyListPage} />
         <Route path="/music" component={MusicHomePage} />
+        <Route path="/music/videos" component={MusicVideosPage} />
+        <Route path="/music/videos/:videoId" component={MusicVideoWatchPage} />
         <Route path="/music/artist/:id" component={ArtistPage} />
         <Route path="/music/album/:id" component={AlbumPage} />
         <Route path="/music/genre/:query" component={GenrePage} />
