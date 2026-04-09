@@ -338,9 +338,18 @@ export async function getStreamSources(
     ? `/api/stream/movie/${tmdbId}/nontongo${nontongoQStr}`
     : `/api/stream/tv/${tmdbId}/${s}/${e}/nontongo`;
 
-  const [videasyRes, nontongoRes] = await Promise.allSettled([
+  const mbQs = new URLSearchParams();
+  if (meta?.title) mbQs.set("title", meta.title);
+  if (meta?.year)  mbQs.set("year",  meta.year);
+  const mbQStr = mbQs.toString() ? `?${mbQs.toString()}` : "";
+  const movieboxPath = type === "movie"
+    ? `/api/stream/movie/${tmdbId}/moviebox${mbQStr}`
+    : `/api/stream/tv/${tmdbId}/${s}/${e}/moviebox${mbQStr}`;
+
+  const [videasyRes, nontongoRes, movieboxRes] = await Promise.allSettled([
     fetch(videasyPath),
     fetch(nontongoPath),
+    fetch(movieboxPath),
   ]);
 
   const videasySources: StreamSource[] = [];
@@ -355,7 +364,14 @@ export async function getStreamSources(
     nontongoSources.push(...(data.sources ?? []));
   }
 
-  const allSources = [...videasySources, ...nontongoSources];
+  const movieboxSources: StreamSource[] = [];
+  if (movieboxRes.status === "fulfilled" && movieboxRes.value.ok) {
+    const data: StreamResponse = await movieboxRes.value.json();
+    movieboxSources.push(...(data.sources ?? []));
+  }
+
+  // Order: HLS sources first (Videasy, NontonGo), then MP4 (MovieBox)
+  const allSources = [...videasySources, ...nontongoSources, ...movieboxSources];
 
   if (allSources.length === 0) {
     throw new Error("Stream unavailable — no sources returned");

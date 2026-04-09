@@ -17,7 +17,7 @@ interface Props {
 
 type Level = { height: number; bitrate: number };
 
-export function VideoPlayer({ src, poster, tracks = [], onReady, onError }: Props) {
+export function VideoPlayer({ src, poster, tracks = [], onReady, onError, sourceType }: Props) {
   const videoRef     = useRef<HTMLVideoElement>(null);
   const hlsRef       = useRef<Hls | null>(null);
   const wrapRef      = useRef<HTMLDivElement>(null);
@@ -64,7 +64,29 @@ export function VideoPlayer({ src, poster, tracks = [], onReady, onError }: Prop
     video.addEventListener("playing",  onPlaying);
     video.addEventListener("canplay",  onCanPlay);
 
-    if (Hls.isSupported()) {
+    if (sourceType === "mp4") {
+      // ── Native MP4 — use the video element directly ──────────────────────
+      video.src = src;
+      if (poster) video.poster = poster;
+      const onVideoError = () => {
+        setErrMsg("Stream unavailable");
+        onError?.(4);
+      };
+      video.addEventListener("error", onVideoError);
+      setPlayAttempted(true);
+      video.play().catch(() => {
+        setNeedsClick(true);
+        setBuffering(false);
+      });
+      onReady?.(video);
+      return () => {
+        video.removeEventListener("waiting",  onWaiting);
+        video.removeEventListener("playing",  onPlaying);
+        video.removeEventListener("canplay",  onCanPlay);
+        video.removeEventListener("error",    onVideoError);
+        video.src = "";
+      };
+    } else if (Hls.isSupported()) {
       const hls = new Hls({
         enableWorker:           false,
         lowLatencyMode:         false,
