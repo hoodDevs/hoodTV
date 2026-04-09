@@ -61,12 +61,12 @@ async function tmdbFetch(path: string): Promise<any> {
 }
 
 
-export function posterUrl(path: string | null | undefined, size = "w342") {
+export function posterUrl(path: string | null | undefined, size = "w185") {
   if (!path) return null;
   return `${TMDB_IMAGE_BASE}${size}${path}`;
 }
 
-export function backdropUrl(path: string | null | undefined, size = "original") {
+export function backdropUrl(path: string | null | undefined, size = "w1280") {
   if (!path) return null;
   return `${TMDB_IMAGE_BASE}${size}${path}`;
 }

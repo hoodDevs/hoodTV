@@ -87,6 +87,8 @@ export default function TitlePage() {
               alt={details.title}
               className="absolute inset-0 w-full h-full object-cover"
               style={{ objectPosition: "center 20%" }}
+              fetchPriority="high"
+              decoding="async"
             />
             {/* Dark overlay */}
             <div className="absolute inset-0" style={{ background: "rgba(0,0,0,0.35)" }} />
@@ -152,6 +154,7 @@ export default function TitlePage() {
                   objectFit: "cover",
                   border: "1px solid rgba(255,255,255,0.08)",
                 }}
+                decoding="async"
                 data-testid="title-poster"
               />
             </div>
@@ -447,6 +450,8 @@ export default function TitlePage() {
                       <img
                         src={member.profile}
                         alt={member.name}
+                        loading="lazy"
+                        decoding="async"
                         style={{ width: "100%", height: "100%", objectFit: "cover" }}
                       />
                     ) : (
@@ -631,6 +636,8 @@ export default function TitlePage() {
                         <img
                           src={ep.still_path}
                           alt={ep.name}
+                          loading="lazy"
+                          decoding="async"
                           style={{ width: "100%", height: "100%", objectFit: "cover" }}
                         />
                       ) : (

@@ -56,6 +56,7 @@ export function MediaCard({ item, className = "", size = "md", fill = false, pro
               className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
               onError={() => setImgError(true)}
               loading="lazy"
+              decoding="async"
             />
           ) : (
             <div
