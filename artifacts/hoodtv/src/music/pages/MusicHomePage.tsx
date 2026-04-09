@@ -2,11 +2,10 @@ import { useEffect, useState, useRef } from "react";
 import { Search, Play, ChevronRight, MonitorPlay } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
-import { searchTracks, getChartTracks, GENRES, artworkUrl, type Track } from "../lib/musicApi";
+import { searchTracks, GENRES, artworkUrl, type Track } from "../lib/musicApi";
 import type { YtVideo } from "./MusicVideosPage";
 import { useMusicPlayer } from "../context/MusicPlayerContext";
 import { TrackRow } from "../components/TrackRow";
-import { AlbumCard } from "../components/AlbumCard";
 import { ArtistCard } from "../components/ArtistCard";
 import { MINI_PLAYER_HEIGHT } from "../components/MiniPlayer";
 
@@ -210,17 +209,6 @@ export function MusicHomePage() {
     new Map(hotTracks.map((t) => [t.artistId, t])).values()
   ).slice(0, 8);
 
-  const uniqueAlbums = Array.from(
-    new Map(
-      hotTracks
-        .filter((t) => t.collectionId)
-        .map((t) => [
-          t.collectionId,
-          { collectionId: t.collectionId, collectionName: t.collectionName, artistName: t.artistName, artistId: t.artistId, artworkUrl100: t.artworkUrl100, releaseDate: new Date().toISOString(), trackCount: 0, primaryGenreName: t.primaryGenreName },
-        ])
-    ).values()
-  ).slice(0, 8);
-
   const isSearching = debouncedQuery.trim().length > 1;
 
   return (
@@ -339,15 +327,6 @@ export function MusicHomePage() {
                   artworkUrl100={t.artworkUrl100}
                   genre={t.primaryGenreName}
                 />
-              ))}
-            </HScrollRow>
-          </Section>
-
-          {/* Albums */}
-          <Section title="Albums">
-            <HScrollRow>
-              {uniqueAlbums.map((a) => (
-                <AlbumCard key={a.collectionId} album={a} />
               ))}
             </HScrollRow>
           </Section>

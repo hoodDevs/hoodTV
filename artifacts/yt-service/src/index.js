@@ -17,6 +17,14 @@ async function getYT() {
   return yt;
 }
 
+function simpleHash(str) {
+  let h = 0;
+  for (let i = 0; i < (str || "").length; i++) {
+    h = (Math.imul(31, h) + str.charCodeAt(i)) | 0;
+  }
+  return Math.abs(h);
+}
+
 function mapVideo(v) {
   return {
     id: v.id,
@@ -30,6 +38,100 @@ function mapVideo(v) {
     publishedAt: v.published?.text ?? "",
   };
 }
+
+function mapMusicTrack(item) {
+  const videoId = item.id || "";
+  const title =
+    typeof item.title === "object" ? (item.title?.text || "") : (item.title || "");
+  const artistName =
+    item.artists?.[0]?.name ||
+    item.author?.name ||
+    (typeof item.short_byline_text === "object"
+      ? item.short_byline_text?.text
+      : item.short_byline_text) ||
+    "";
+  const channelId = item.artists?.[0]?.id || item.author?.id || "";
+  const albumName =
+    typeof item.album === "object"
+      ? item.album?.name || artistName
+      : item.album || artistName;
+  const durationSec =
+    item.duration_seconds || item.duration?.seconds || 0;
+  const thumbnail =
+    item.thumbnail?.contents?.[0]?.url ||
+    item.thumbnails?.[0]?.url ||
+    item.best_thumbnail?.url ||
+    "";
+
+  return {
+    trackId: simpleHash(videoId || title),
+    videoId,
+    trackName: title,
+    artistName,
+    artistId: simpleHash(channelId || artistName),
+    channelId,
+    collectionName: albumName,
+    collectionId: 0,
+    artworkUrl100: thumbnail,
+    previewUrl: videoId ? `/api/yt/music/stream?videoId=${videoId}` : null,
+    trackTimeMillis: durationSec * 1000,
+    primaryGenreName: "Music",
+  };
+}
+
+// ─── Music endpoints ──────────────────────────────────────────────────────────
+
+// YouTube Music search (songs)
+// GET /api/yt/music/search?q=...&limit=20
+app.get("/api/yt/music/search", async (req, res) => {
+  try {
+    const { q, limit = "20" } = req.query;
+    if (!q) return res.status(400).json({ error: "q required" });
+    const innertube = await getYT();
+    const results = await innertube.music.search(q, { type: "song" });
+    const tracks = [];
+    const max = parseInt(limit, 10);
+    for (const section of results.sections || []) {
+      for (const item of section.contents || []) {
+        if (tracks.length >= max) break;
+        const mapped = mapMusicTrack(item);
+        if (mapped.videoId) tracks.push(mapped);
+      }
+      if (tracks.length >= max) break;
+    }
+    res.json({ tracks });
+  } catch (err) {
+    console.error("/api/yt/music/search error:", err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Stream audio for a YouTube videoId (proxied to avoid CORS)
+// GET /api/yt/music/stream?videoId=xxx
+app.get("/api/yt/music/stream", async (req, res) => {
+  try {
+    const { videoId } = req.query;
+    if (!videoId) return res.status(400).json({ error: "videoId required" });
+
+    const innertube = await getYT();
+    const info = await innertube.getInfo(videoId);
+
+    res.setHeader("Content-Type", "audio/mp4");
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Transfer-Encoding", "chunked");
+
+    const stream = await info.download({ type: "audio", quality: "best", format: "any" });
+    for await (const chunk of stream) {
+      if (!res.writableEnded) res.write(chunk);
+    }
+    if (!res.writableEnded) res.end();
+  } catch (err) {
+    console.error("/api/yt/music/stream error:", err.message);
+    if (!res.headersSent) res.status(500).json({ error: err.message });
+  }
+});
+
+// ─── Video endpoints ───────────────────────────────────────────────────────────
 
 // Browse / search music videos
 // GET /api/yt/videos?q=...&limit=24
@@ -60,8 +162,6 @@ app.get("/api/yt/info/:videoId", async (req, res) => {
 
     const basic = info.basic_info ?? {};
     const related = [];
-
-    // walk watch_next_feed for related videos
     const feed = info.watch_next_feed ?? [];
     for (const item of feed) {
       if ((item.type === "CompactVideo" || item.type === "Video") && item.id && related.length < 20) {

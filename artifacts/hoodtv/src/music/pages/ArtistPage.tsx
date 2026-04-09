@@ -1,31 +1,24 @@
 import { useParams, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft, Play, Shuffle } from "lucide-react";
-import { getArtistTopTracks, getArtistAlbums, artworkUrl, type Track } from "../lib/musicApi";
+import { searchTracks, artworkUrl, type Track } from "../lib/musicApi";
 import { useMusicPlayer } from "../context/MusicPlayerContext";
 import { TrackRow } from "../components/TrackRow";
-import { AlbumCard } from "../components/AlbumCard";
 import { MINI_PLAYER_HEIGHT } from "../components/MiniPlayer";
 
 export function ArtistPage() {
   const { id } = useParams<{ id: string }>();
-  const artistId = Number(id);
+  const artistName = decodeURIComponent(id ?? "");
   const [, navigate] = useLocation();
   const player = useMusicPlayer();
 
-  const { data: tracks = [], isLoading: loadingTracks } = useQuery<Track[]>({
-    queryKey: ["artist-tracks", artistId],
-    queryFn: () => getArtistTopTracks(artistId, 15),
+  const { data: tracks = [], isLoading } = useQuery<Track[]>({
+    queryKey: ["artist-tracks", artistName],
+    queryFn: () => searchTracks(artistName, 20),
     staleTime: 10 * 60 * 1000,
+    enabled: !!artistName,
   });
 
-  const { data: albums = [] } = useQuery({
-    queryKey: ["artist-albums", artistId],
-    queryFn: () => getArtistAlbums(artistId),
-    staleTime: 10 * 60 * 1000,
-  });
-
-  const artistName = tracks[0]?.artistName ?? albums[0]?.artistName ?? "Artist";
   const art = tracks[0]?.artworkUrl100 ? artworkUrl(tracks[0].artworkUrl100, 300) : "";
 
   const handlePlayAll = () => {
@@ -50,7 +43,7 @@ export function ArtistPage() {
       }}
     >
       {/* Hero */}
-      <div style={{ position: "relative", minHeight: 300, overflow: "hidden" }}>
+      <div style={{ position: "relative", minHeight: 280, overflow: "hidden" }}>
         {art && (
           <div
             style={{
@@ -83,12 +76,12 @@ export function ArtistPage() {
               <img
                 src={art}
                 alt={artistName}
-                style={{ width: 140, height: 140, borderRadius: "50%", objectFit: "cover", boxShadow: "0 8px 32px rgba(0,0,0,0.5)", flexShrink: 0 }}
+                style={{ width: 130, height: 130, borderRadius: "50%", objectFit: "cover", boxShadow: "0 8px 32px rgba(0,0,0,0.5)", flexShrink: 0 }}
               />
             )}
             <div>
               <div style={{ fontSize: 11, color: "#9D97E8", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 6 }}>Artist</div>
-              <h1 style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 52, color: "#fff", margin: "0 0 16px" }}>
+              <h1 style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 48, color: "#fff", margin: "0 0 16px" }}>
                 {artistName}
               </h1>
               <div style={{ display: "flex", gap: 10 }}>
@@ -123,32 +116,17 @@ export function ArtistPage() {
       </div>
 
       <div style={{ padding: "0 32px" }}>
-        {/* Top Tracks */}
-        <div style={{ marginBottom: 40 }}>
-          <h2 style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 20, color: "#f0f0f0", letterSpacing: "0.04em", marginBottom: 12 }}>
-            Top Tracks
-          </h2>
-          {loadingTracks ? (
-            <div style={{ color: "#555", fontSize: 13 }}>Loading…</div>
-          ) : (
-            tracks.map((t, i) => (
-              <TrackRow key={t.trackId} track={t} index={i} queue={tracks} showAlbum />
-            ))
-          )}
-        </div>
-
-        {/* Albums */}
-        {albums.length > 0 && (
-          <div style={{ marginBottom: 40 }}>
-            <h2 style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 20, color: "#f0f0f0", letterSpacing: "0.04em", marginBottom: 16 }}>
-              Albums
-            </h2>
-            <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
-              {albums.map((a) => (
-                <AlbumCard key={a.collectionId} album={a} />
-              ))}
-            </div>
-          </div>
+        <h2 style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 20, color: "#f0f0f0", letterSpacing: "0.04em", marginBottom: 12 }}>
+          Top Tracks
+        </h2>
+        {isLoading ? (
+          <div style={{ color: "#555", fontSize: 13 }}>Loading…</div>
+        ) : tracks.length === 0 ? (
+          <div style={{ color: "#555", fontSize: 13 }}>No tracks found.</div>
+        ) : (
+          tracks.map((t, i) => (
+            <TrackRow key={t.trackId} track={t} index={i} queue={tracks} showAlbum />
+          ))
         )}
       </div>
     </div>

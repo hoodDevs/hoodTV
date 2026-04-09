@@ -1,5 +1,5 @@
 import { useLocation } from "wouter";
-import { artworkUrl, type Track } from "../lib/musicApi";
+import { artworkUrl } from "../lib/musicApi";
 import { Music } from "lucide-react";
 
 interface Props {
@@ -9,14 +9,14 @@ interface Props {
   genre?: string;
 }
 
-export function ArtistCard({ artistId, artistName, artworkUrl100, genre }: Props) {
+export function ArtistCard({ artistName, artworkUrl100, genre }: Props) {
   const [, navigate] = useLocation();
   const art = artworkUrl100 ? artworkUrl(artworkUrl100, 200) : "";
 
   return (
     <div
       style={{ width: 140, flexShrink: 0, cursor: "pointer", textAlign: "center" }}
-      onClick={() => navigate(`/music/artist/${artistId}`)}
+      onClick={() => navigate(`/music/artist/${encodeURIComponent(artistName)}`)}
       className="artist-card"
     >
       <div

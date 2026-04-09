@@ -2,9 +2,9 @@ import { useMusicPlayer } from "../context/MusicPlayerContext";
 import { artworkUrl, fmtDuration } from "../lib/musicApi";
 import {
   Play, Pause, SkipBack, SkipForward, Volume2, VolumeX,
-  Shuffle, Repeat, Repeat1, ChevronUp,
+  Shuffle, Repeat, Repeat1,
 } from "lucide-react";
-import { useState, useRef } from "react";
+import { useState } from "react";
 import { useLocation } from "wouter";
 
 export const MINI_PLAYER_HEIGHT = 80;
@@ -13,7 +13,6 @@ export function MiniPlayer() {
   const player = useMusicPlayer();
   const [, navigate] = useLocation();
   const [showVolume, setShowVolume] = useState(false);
-  const seekRef = useRef<HTMLDivElement>(null);
 
   if (!player.currentTrack) return null;
 
@@ -55,16 +54,18 @@ export function MiniPlayer() {
         gap: "16px",
       }}
     >
-      {/* Track info */}
+      {/* Track info → navigate to artist page */}
       <div
         style={{ display: "flex", alignItems: "center", gap: "12px", minWidth: 0, flex: "0 0 260px", cursor: "pointer" }}
-        onClick={() => navigate(`/music/album/${t.collectionId}`)}
+        onClick={() => navigate(`/music/artist/${encodeURIComponent(t.artistName)}`)}
       >
-        <img
-          src={art}
-          alt={t.collectionName}
-          style={{ width: 46, height: 46, borderRadius: 6, objectFit: "cover", flexShrink: 0 }}
-        />
+        {art && (
+          <img
+            src={art}
+            alt={t.trackName}
+            style={{ width: 46, height: 46, borderRadius: 6, objectFit: "cover", flexShrink: 0 }}
+          />
+        )}
         <div style={{ minWidth: 0 }}>
           <div style={{ fontSize: 13, fontWeight: 500, color: "#f0f0f0", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
             {t.trackName}
@@ -121,7 +122,6 @@ export function MiniPlayer() {
         <div style={{ display: "flex", alignItems: "center", gap: "8px", width: "100%", maxWidth: 500 }}>
           <span style={{ fontSize: 10, color: "#555", minWidth: 30, textAlign: "right" }}>{elapsed}</span>
           <div
-            ref={seekRef}
             onClick={handleSeekClick}
             style={{
               flex: 1, height: 3, background: "rgba(255,255,255,0.12)",

@@ -35,6 +35,11 @@ export function TrackRow({ track, index, queue, showArt = false, showAlbum = tru
     navigate(`/music/videos?q=${q}`);
   };
 
+  const goToArtist = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    navigate(`/music/artist/${encodeURIComponent(track.artistName)}`);
+  };
+
   return (
     <div
       onClick={handlePlay}
@@ -72,7 +77,7 @@ export function TrackRow({ track, index, queue, showArt = false, showAlbum = tru
       {showArt && (
         <img
           src={artworkUrl(track.artworkUrl100, 46)}
-          alt={track.collectionName}
+          alt={track.trackName}
           style={{ width: 46, height: 46, borderRadius: 4, objectFit: "cover" }}
         />
       )}
@@ -101,37 +106,25 @@ export function TrackRow({ track, index, queue, showArt = false, showAlbum = tru
             color: "#666",
             textAlign: "left",
           }}
-          onClick={(e) => {
-            e.stopPropagation();
-            navigate(`/music/artist/${track.artistId}`);
-          }}
+          onClick={goToArtist}
         >
           {track.artistName}
         </button>
       </div>
 
-      {/* Album name */}
+      {/* Album name (plain text — YouTube has no real album IDs) */}
       {showAlbum && !showArt && (
-        <button
+        <span
           style={{
-            background: "none",
-            border: "none",
-            padding: 0,
-            cursor: "pointer",
             fontSize: 12,
             color: "#555",
             whiteSpace: "nowrap",
             overflow: "hidden",
             textOverflow: "ellipsis",
-            textAlign: "left",
-          }}
-          onClick={(e) => {
-            e.stopPropagation();
-            navigate(`/music/album/${track.collectionId}`);
           }}
         >
           {track.collectionName}
-        </button>
+        </span>
       )}
 
       {/* Duration */}
@@ -139,7 +132,7 @@ export function TrackRow({ track, index, queue, showArt = false, showAlbum = tru
         {fmtDuration(track.trackTimeMillis)}
       </div>
 
-      {/* Watch MV → navigates to video search */}
+      {/* Watch MV */}
       <button
         title="Find music video"
         onClick={handleWatchMV}

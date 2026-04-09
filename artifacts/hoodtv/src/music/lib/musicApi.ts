@@ -1,10 +1,10 @@
-const ITUNES = "https://itunes.apple.com";
-
 export interface Track {
   trackId: number;
+  videoId: string;
   trackName: string;
   artistName: string;
   artistId: number;
+  channelId: string;
   collectionName: string;
   collectionId: number;
   artworkUrl100: string;
@@ -26,39 +26,34 @@ export interface Album {
   primaryGenreName: string;
 }
 
-async function itunesFetch(path: string): Promise<any> {
-  const res = await fetch(`${ITUNES}${path}`);
-  if (!res.ok) throw new Error(`iTunes API ${res.status}`);
+async function ytFetch(path: string): Promise<any> {
+  const res = await fetch(path);
+  if (!res.ok) throw new Error(`YT Music API ${res.status}`);
   return res.json();
 }
 
 export async function searchTracks(term: string, limit = 25): Promise<Track[]> {
-  const data = await itunesFetch(
-    `/search?term=${encodeURIComponent(term)}&media=music&entity=song&limit=${limit}`
+  const data = await ytFetch(
+    `/api/yt/music/search?q=${encodeURIComponent(term)}&limit=${limit}`
   );
-  return (data.results || []).filter((r: any) => r.wrapperType === "track");
+  return data.tracks ?? [];
 }
 
-export async function getArtistTopTracks(artistId: number, limit = 15): Promise<Track[]> {
-  const data = await itunesFetch(
-    `/lookup?id=${artistId}&entity=song&limit=${limit + 1}`
+export async function getArtistTopTracks(artistName: string, limit = 15): Promise<Track[]> {
+  const data = await ytFetch(
+    `/api/yt/music/search?q=${encodeURIComponent(artistName)}&limit=${limit}`
   );
-  return (data.results || []).filter((r: any) => r.wrapperType === "track").slice(0, limit);
+  return data.tracks ?? [];
 }
 
-export async function getArtistAlbums(artistId: number): Promise<Album[]> {
-  const data = await itunesFetch(`/lookup?id=${artistId}&entity=album&limit=25`);
-  return (data.results || []).filter((r: any) => r.wrapperType === "collection");
+export async function getArtistAlbums(_artistId: number): Promise<Album[]> {
+  return [];
 }
 
-export async function getAlbumTracks(albumId: number): Promise<{ album: Album | null; tracks: Track[] }> {
-  const data = await itunesFetch(`/lookup?id=${albumId}&entity=song`);
-  const results = data.results || [];
-  const album = results.find((r: any) => r.wrapperType === "collection") ?? null;
-  const tracks = results
-    .filter((r: any) => r.wrapperType === "track")
-    .sort((a: any, b: any) => (a.discNumber - b.discNumber) || (a.trackNumber - b.trackNumber));
-  return { album, tracks };
+export async function getAlbumTracks(
+  _albumId: number
+): Promise<{ album: Album | null; tracks: Track[] }> {
+  return { album: null, tracks: [] };
 }
 
 export async function getChartTracks(genre: string, limit = 20): Promise<Track[]> {
@@ -67,6 +62,9 @@ export async function getChartTracks(genre: string, limit = 20): Promise<Track[]
 
 export function artworkUrl(url: string | undefined, size = 300): string {
   if (!url) return "";
+  if (url.includes("ytimg.com") || url.includes("lh3.google") || url.includes("yt3.gg")) {
+    return url;
+  }
   return url.replace(/\d+x\d+bb/, `${size}x${size}bb`);
 }
 
