@@ -124,6 +124,30 @@ def _proxied_url(m3u8_url: str) -> str:
     return "/api/proxy/hls?url=" + urllib.parse.quote(m3u8_url, safe="")
 
 
+_QUALITY_BW = {"1080p": "8000000", "720p": "3000000", "480p": "1500000", "360p": "800000"}
+_QUALITY_RES = {"1080p": "1920x1080", "720p": "1280x720", "480p": "854x480", "360p": "640x360"}
+
+
+def _build_master_url(candidate_sources: list) -> str:
+    """
+    Build a /api/proxy/master URL that wraps multiple Videasy media playlists
+    in a synthetic HLS master playlist so HLS.js follows the master→level→segment
+    code path (which probes the first segment before calling addSourceBuffer).
+    This avoids the bufferAddCodecError that occurs when loading bare media
+    playlists whose codec HLS.js cannot determine before the first segment fetch.
+    """
+    parts: list[str] = []
+    for s in candidate_sources:
+        label   = _quality_label(s.get("quality", ""))
+        proxied = _proxied_url(s["url"])
+        bw      = _QUALITY_BW.get(label, "2000000")
+        res     = _QUALITY_RES.get(label, "1280x720")
+        parts.append("url=" + urllib.parse.quote(proxied, safe=""))
+        parts.append("bw="  + bw)
+        parts.append("res=" + urllib.parse.quote(res, safe=""))
+    return "/api/proxy/master?" + "&".join(parts)
+
+
 def _build_captions(subtitles: list) -> List[Caption]:
     caps = []
     seen = set()
@@ -198,14 +222,16 @@ async def _resolve(
     if not await _url_reachable(first_url):
         return StreamResponse(sources=[])
 
+    # Wrap all quality levels in a synthetic master playlist so HLS.js
+    # probes the first segment before creating the SourceBuffer. This avoids
+    # the bufferAddCodecError that occurs with raw media playlists.
     sources = [
         StreamSource(
-            name=_quality_label(s.get("quality", "")),
-            url=_proxied_url(s["url"]),
+            name="Videasy",
+            url=_build_master_url(candidate_sources),
             source_type="hls",
             captions=captions,
         )
-        for s in candidate_sources
     ]
     return StreamResponse(sources=sources)
 

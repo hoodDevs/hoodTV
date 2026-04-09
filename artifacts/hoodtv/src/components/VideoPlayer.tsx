@@ -106,6 +106,7 @@ export function VideoPlayer({ src, poster, tracks = [], onReady, onError, source
       hlsRef.current = hls;
 
       hls.on(Hls.Events.MANIFEST_PARSED, (_e, d) => {
+        console.log("[hoodTV] MANIFEST_PARSED levels:", d.levels.length, "src:", src.slice(0, 80));
         setLevels(d.levels.map((l) => ({ height: l.height, bitrate: l.bitrate })));
         setCurLevel(hls.currentLevel);
 
@@ -113,11 +114,11 @@ export function VideoPlayer({ src, poster, tracks = [], onReady, onError, source
         video.muted = true;
         video.play()
           .then(() => {
-            // Playing muted — show unmute button (muted=true already)
+            console.log("[hoodTV] play() succeeded muted");
             setBuffering(false);
           })
-          .catch(() => {
-            // Autoplay blocked entirely — show click-to-play
+          .catch((err) => {
+            console.warn("[hoodTV] play() rejected:", err?.name, err?.message);
             setNeedsClick(true);
             setBuffering(false);
           });
@@ -128,6 +129,7 @@ export function VideoPlayer({ src, poster, tracks = [], onReady, onError, source
       hls.on(Hls.Events.LEVEL_SWITCHED, (_e, d) => setCurLevel(d.level));
 
       hls.on(Hls.Events.ERROR, (_e, d) => {
+        console.error("[hoodTV] HLS error:", d.type, d.details, "fatal:", d.fatal, "src:", src.slice(0, 80));
         if (!d.fatal) return;
         if (d.type === Hls.ErrorTypes.NETWORK_ERROR) {
           if (netRetryRef.current < 3) {

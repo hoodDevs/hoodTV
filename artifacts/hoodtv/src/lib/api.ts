@@ -320,17 +320,6 @@ export async function getStreamSources(
   const s = season ?? 1;
   const e = episode ?? 1;
 
-  const qs = new URLSearchParams();
-  if (meta?.title) qs.set("title", meta.title);
-  if (meta?.year) qs.set("year", meta.year);
-  if (meta?.imdbId) qs.set("imdb_id", meta.imdbId);
-  if (meta?.totalSeasons) qs.set("total_seasons", String(meta.totalSeasons));
-  const qStr = qs.toString() ? `?${qs.toString()}` : "";
-
-  const videasyPath = type === "movie"
-    ? `/api/stream/movie/${tmdbId}/videasy${qStr}`
-    : `/api/stream/tv/${tmdbId}/${s}/${e}/videasy${qStr}`;
-
   const nontongoQs = new URLSearchParams();
   if (meta?.imdbId) nontongoQs.set("imdb_id", meta.imdbId);
   const nontongoQStr = nontongoQs.toString() ? `?${nontongoQs.toString()}` : "";
@@ -346,17 +335,10 @@ export async function getStreamSources(
     ? `/api/stream/movie/${tmdbId}/moviebox${mbQStr}`
     : `/api/stream/tv/${tmdbId}/${s}/${e}/moviebox${mbQStr}`;
 
-  const [videasyRes, nontongoRes, movieboxRes] = await Promise.allSettled([
-    fetch(videasyPath),
+  const [nontongoRes, movieboxRes] = await Promise.allSettled([
     fetch(nontongoPath),
     fetch(movieboxPath),
   ]);
-
-  const videasySources: StreamSource[] = [];
-  if (videasyRes.status === "fulfilled" && videasyRes.value.ok) {
-    const data: StreamResponse = await videasyRes.value.json();
-    videasySources.push(...(data.sources ?? []));
-  }
 
   const nontongoSources: StreamSource[] = [];
   if (nontongoRes.status === "fulfilled" && nontongoRes.value.ok) {
@@ -370,8 +352,8 @@ export async function getStreamSources(
     movieboxSources.push(...(data.sources ?? []));
   }
 
-  // Order: HLS sources first (Videasy, NontonGo), then MP4 (MovieBox)
-  const allSources = [...videasySources, ...nontongoSources, ...movieboxSources];
+  // Order: HLS sources first (NontonGo), then MP4 (MovieBox)
+  const allSources = [...nontongoSources, ...movieboxSources];
 
   if (allSources.length === 0) {
     throw new Error("Stream unavailable — no sources returned");

@@ -8,8 +8,9 @@ can consume them without errors.
 Uses an async httpx client for fast concurrent segment downloads.
 """
 import urllib.parse
+from typing import List
 import httpx
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import Response
 
 router = APIRouter()
@@ -108,6 +109,35 @@ def _rewrite_playlist(text: str, base_url: str) -> str:
             abs_url = urllib.parse.urljoin(base_url, s)
         out.append(_proxify(abs_url))
     return "\n".join(out)
+
+
+@router.get("/proxy/master")
+async def proxy_master(
+    url: List[str] = Query(...),
+    bw:  List[str] = Query(default=[]),
+    res: List[str] = Query(default=[]),
+):
+    """
+    Serve a synthetic HLS master playlist from individual media playlist URLs.
+
+    HLS.js processes master playlists differently from raw media playlists:
+    it probes the first segment to detect the actual codec before calling
+    addSourceBuffer(), avoiding the bufferAddCodecError that occurs when
+    loading media playlists directly.
+    """
+    _default_bws = ["8000000", "3000000", "800000", "400000"]
+    _default_res = ["1920x1080", "1280x720", "854x480", "640x360"]
+    lines = ["#EXTM3U"]
+    for i, u in enumerate(url):
+        b = bw[i]  if i < len(bw)  else _default_bws[min(i, len(_default_bws) - 1)]
+        r = res[i] if i < len(res) else _default_res[min(i, len(_default_res) - 1)]
+        lines.append(f'#EXT-X-STREAM-INF:BANDWIDTH={b},RESOLUTION={r}')
+        lines.append(u)
+    return Response(
+        content="\n".join(lines),
+        media_type=_PLAYLIST_CT,
+        headers={**_CORS, "Cache-Control": "no-cache"},
+    )
 
 
 @router.api_route("/proxy/hls", methods=["GET", "HEAD", "OPTIONS"])
