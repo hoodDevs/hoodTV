@@ -81,5 +81,4 @@ export const GENRES: { label: string; query: string; color: string }[] = [
   { label: "R&B", query: "rnb soul 2024", color: "#c06090" },
   { label: "Electronic", query: "electronic dance 2024", color: "#54a8e0" },
   { label: "Rock", query: "rock hits 2024", color: "#e05454" },
-  { label: "Latin", query: "latin pop 2024", color: "#e0c050" },
 ];
