@@ -9,7 +9,7 @@ import {
   recordVideoClick,
   buildFeedQuery,
   getOrderedChips,
-  hasFeedData,
+  getConfidenceLevel,
   type ChipDef,
 } from "../lib/feedAlgorithm";
 
@@ -179,14 +179,14 @@ export function MusicHomePage() {
   // Chips reorder on mount so scores are always fresh
   const [chips, setChips] = useState<ChipDef[]>(() => getOrderedChips(BASE_CHIPS));
   const [activeChip, setActiveChip] = useState(0);
-  const [feedPersonalized, setFeedPersonalized] = useState(false);
+  const [confidence, setConfidence] = useState<0 | 1 | 2>(() => getConfidenceLevel());
   const [searchQuery, setSearchQuery] = useState("");
   const debouncedSearch = useDebounce(searchQuery);
 
-  // Recompute chips + personalization state from storage
+  // Recompute chips + confidence from storage
   const refreshChips = useCallback(() => {
     setChips(getOrderedChips(BASE_CHIPS));
-    setFeedPersonalized(hasFeedData());
+    setConfidence(getConfidenceLevel());
   }, []);
 
   useEffect(() => {
@@ -331,16 +331,17 @@ export function MusicHomePage() {
                   <Sparkles
                     size={13}
                     style={{
-                      color: isActive ? "#fff" : feedPersonalized ? "#9D97E8" : "#555",
+                      color: isActive ? "#fff" : confidence >= 1 ? "#9D97E8" : "#555",
                     }}
                   />
                 )}
                 {chip.label}
-                {isForYou && feedPersonalized && !isActive && (
+                {isForYou && confidence >= 1 && !isActive && (
                   <span
                     style={{
                       width: 6, height: 6, borderRadius: "50%",
-                      background: "#7F77DD", flexShrink: 0,
+                      background: confidence === 2 ? "#7F77DD" : "#555",
+                      flexShrink: 0,
                     }}
                   />
                 )}
@@ -350,21 +351,25 @@ export function MusicHomePage() {
         </div>
       )}
 
-      {/* "For You" subtitle when active + personalized */}
+      {/* "For You" subtitle — confidence-aware */}
       <AnimatePresence>
-        {!isSearching && activeLabel === "For You" && feedPersonalized && (
+        {!isSearching && activeLabel === "For You" && confidence >= 1 && (
           <motion.div
+            key={confidence}
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: "auto" }}
             exit={{ opacity: 0, height: 0 }}
             style={{
               padding: "10px 24px 0",
-              fontSize: 12, color: "#9D97E8",
+              fontSize: 12,
+              color: confidence === 2 ? "#9D97E8" : "#666",
               display: "flex", alignItems: "center", gap: 6,
             }}
           >
             <Sparkles size={12} />
-            Tailored to your taste — keeps learning as you watch
+            {confidence === 1
+              ? "Learning your taste — keep watching to personalise"
+              : "Tailored to your taste · updates as you watch"}
           </motion.div>
         )}
       </AnimatePresence>
