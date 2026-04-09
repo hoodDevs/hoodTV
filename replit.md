@@ -36,12 +36,18 @@ Netflix-style streaming platform with dark purple theme.
 ```
 Browser
   │
-  ├── /api/proxy/hls → Vite proxy → Go (8090) — HLS segments/playlists
-  │
-  └── /api/* → Vite proxy → Scala (8000) → Python (8080) — stream API
-                               └── /api/health → aggregates Python + Rust + Go
-                               └── /api/health/cdn → Rust (9000) — CDN health
+  └── /api/* → Vite proxy → Python (8080) — stream extraction + HLS proxy
+                              (curl_cffi Chrome TLS fingerprinting for CDN bypass)
+
+Monitoring / Health (not in critical streaming path):
+  Go   (8090) → /health — high-perf proxy, ready for non-Cloudflare CDNs
+  Rust (9000) → /health, /health/cdn, /health/status — circuit breaker
+  Scala(8000) → /api/health aggregates all services
 ```
+
+> **Note**: Go's HLS proxy (stdlib net/http) cannot bypass Cloudflare TLS fingerprinting
+> that `fast.vidplus.dev` requires. Python's curl_cffi with Chrome impersonation handles
+> all streaming traffic. Go/Rust/Scala run as health/monitoring services.
 
 ### Python API Server (artifacts/api-server-py, port 8080)
 FastAPI + Uvicorn. Stream source extraction only.

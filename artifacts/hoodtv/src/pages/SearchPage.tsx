@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { Search, X, Film, Tv } from "lucide-react";
+import { Search, X, Film, Tv, ChevronDown } from "lucide-react";
 import { useLocation } from "wouter";
 import { MediaCard } from "@/components/MediaCard";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -12,8 +12,13 @@ export default function SearchPage() {
   const [results, setResults] = useState<MediaItem[]>([]);
   const [suggestions, setSuggestions] = useState<MediaItem[]>([]);
   const [loading, setLoading] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [searched, setSearched] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(false);
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(false);
+  const [activeQuery, setActiveQuery] = useState("");
+
   const inputRef = useRef<HTMLInputElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const suggestDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -38,16 +43,38 @@ export default function SearchPage() {
       setResults([]);
       setSearched(false);
       setLoading(false);
+      setHasMore(false);
+      setPage(1);
+      setActiveQuery("");
       return;
     }
     setLoading(true);
     setSearched(true);
     setShowSuggestions(false);
-    searchContent(q).then((data) => {
+    setPage(1);
+    setActiveQuery(q);
+    searchContent(q, 1).then((data) => {
       setResults(data);
+      setHasMore(data.length >= 18);
       setLoading(false);
     });
   }, []);
+
+  const loadMore = useCallback(() => {
+    if (!activeQuery || loadingMore) return;
+    const nextPage = page + 1;
+    setLoadingMore(true);
+    searchContent(activeQuery, nextPage).then((data) => {
+      setResults((prev) => {
+        const existing = new Set(prev.map((r) => r.id));
+        const fresh = data.filter((r) => !existing.has(r.id));
+        return [...prev, ...fresh];
+      });
+      setHasMore(data.length >= 18);
+      setPage(nextPage);
+      setLoadingMore(false);
+    });
+  }, [activeQuery, page, loadingMore]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
@@ -88,7 +115,7 @@ export default function SearchPage() {
 
   return (
     <div className="min-h-screen animate-fade-in" style={{ backgroundColor: "#0a0a0a" }}>
-      <div className="pt-10 px-4 sm:px-8 pb-12 max-w-7xl mx-auto">
+      <div className="pt-10 px-4 sm:px-8 pb-16 max-w-7xl mx-auto">
         <div className="relative max-w-2xl mx-auto mb-10" ref={wrapperRef}>
           <Search
             size={22}
@@ -118,6 +145,9 @@ export default function SearchPage() {
                 setSuggestions([]);
                 setSearched(false);
                 setShowSuggestions(false);
+                setHasMore(false);
+                setPage(1);
+                setActiveQuery("");
               }}
               className="absolute right-4 top-1/2 -translate-y-1/2 text-[#a0a0a0] hover:text-white z-10"
               data-testid="search-clear"
@@ -203,13 +233,51 @@ export default function SearchPage() {
         {!loading && results.length > 0 && (
           <>
             <p className="text-[#a0a0a0] text-sm mb-6" data-testid="search-results-count">
-              {results.length} result{results.length !== 1 ? "s" : ""} for "{query}"
+              {results.length} result{results.length !== 1 ? "s" : ""} for "{activeQuery}"
             </p>
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
               {results.map((item) => (
                 <MediaCard key={item.id} item={item} fill />
               ))}
             </div>
+
+            {hasMore && (
+              <div className="flex justify-center mt-10">
+                <button
+                  onClick={loadMore}
+                  disabled={loadingMore}
+                  className="flex items-center gap-2 px-8 py-3 rounded-full font-medium text-sm transition-all disabled:opacity-50"
+                  style={{
+                    backgroundColor: "#1a1a1a",
+                    border: "1px solid #333",
+                    color: "#c0bdf5",
+                  }}
+                >
+                  {loadingMore ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-[#7F77DD] border-t-transparent rounded-full animate-spin" />
+                      Loading...
+                    </>
+                  ) : (
+                    <>
+                      <ChevronDown size={16} />
+                      Load More
+                    </>
+                  )}
+                </button>
+              </div>
+            )}
+
+            {loadingMore && (
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 mt-4">
+                {Array.from({ length: 10 }).map((_, i) => (
+                  <div key={i}>
+                    <Skeleton className="aspect-[2/3] rounded-lg w-full bg-[#1a1a1a]" />
+                    <Skeleton className="h-3 w-3/4 mt-2 bg-[#1a1a1a]" />
+                  </div>
+                ))}
+              </div>
+            )}
           </>
         )}
 
