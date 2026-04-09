@@ -5,7 +5,6 @@ import { useLocation } from "wouter";
 import { searchTracks, GENRES, artworkUrl, type Track } from "../lib/musicApi";
 import type { YtVideo } from "./MusicVideosPage";
 import { TrackRow } from "../components/TrackRow";
-import { ArtistCard } from "../components/ArtistCard";
 import { motion } from "framer-motion";
 
 function useDebounce(value: string, ms = 400) {
@@ -259,10 +258,6 @@ export function MusicHomePage() {
 
   const featuredTrack = hotTracks[0] ?? null;
 
-  const uniqueArtists = Array.from(
-    new Map(hotTracks.map((t) => [t.artistId, t])).values()
-  ).slice(0, 10);
-
   const isSearching = debouncedQuery.trim().length > 1;
 
   return (
@@ -352,28 +347,6 @@ export function MusicHomePage() {
                 </motion.div>
               ))}
             </motion.div>
-          </Section>
-
-          {/* Artists */}
-          <Section title="Artists to Watch" onMore={() => {}}>
-            <HScrollRow>
-              {uniqueArtists.map((t, i) => (
-                <motion.div 
-                  key={t.artistId}
-                  initial={{ opacity: 0, scale: 0.8 }}
-                  whileInView={{ opacity: 1, scale: 1 }}
-                  viewport={{ once: true }}
-                  transition={{ delay: i * 0.05, type: "spring", stiffness: 200 }}
-                >
-                  <ArtistCard
-                    artistId={t.artistId}
-                    artistName={t.artistName}
-                    artworkUrl100={t.artworkUrl100}
-                    genre={t.primaryGenreName}
-                  />
-                </motion.div>
-              ))}
-            </HScrollRow>
           </Section>
 
           {/* Music Videos */}
