@@ -10,6 +10,7 @@ import subprocess
 import asyncio
 import time
 import urllib.parse
+import httpx
 from pathlib import Path
 from typing import List, Optional
 
@@ -24,7 +25,7 @@ _RUNNER   = _WASM_DIR / "runner.cjs"
 
 # ── In-memory cache ───────────────────────────────────────────────────────────
 _cache: dict = {}
-_CACHE_TTL   = 3600  # 1 hour
+_CACHE_TTL   = 900   # 15 minutes — Videasy CDN workers can go offline
 
 
 def _cache_key(tmdb_id: int, kind: str, season: int = 0, episode: int = 0) -> str:
@@ -135,6 +136,16 @@ def _build_captions(subtitles: list) -> List[Caption]:
     return caps
 
 
+async def _url_reachable(url: str) -> bool:
+    """Quick HEAD check to confirm the upstream CDN URL is alive."""
+    try:
+        async with httpx.AsyncClient(timeout=8) as client:
+            r = await client.head(url, headers={"User-Agent": "Mozilla/5.0"}, follow_redirects=True)
+            return r.status_code < 500
+    except Exception:
+        return False
+
+
 async def _resolve(
     tmdb_id: int,
     media_type: str,
@@ -145,7 +156,7 @@ async def _resolve(
     imdb_id: str = "",
     total_seasons: str = "1",
 ) -> StreamResponse:
-    """Run WASM in a thread → return proxied sources sorted by quality."""
+    """Run WASM in a thread → validate URLs → return proxied sources sorted by quality."""
     loop = asyncio.get_event_loop()
 
     result = await loop.run_in_executor(
@@ -158,6 +169,20 @@ async def _resolve(
     captions    = _build_captions(result.get("subtitles", []))
     raw_sources = sorted(result.get("sources", []), key=lambda s: _quality_rank(s.get("quality", "")))
 
+    candidate_sources = [
+        s for s in raw_sources
+        if s.get("url") and ".m3u8" in s["url"]
+    ]
+
+    if not candidate_sources:
+        return StreamResponse(sources=[])
+
+    # Validate the first (best quality) source URL is actually reachable.
+    # If the CDN worker is dead, skip all sources rather than returning a broken URL.
+    first_url = candidate_sources[0]["url"]
+    if not await _url_reachable(first_url):
+        return StreamResponse(sources=[])
+
     sources = [
         StreamSource(
             name=_quality_label(s.get("quality", "")),
@@ -165,8 +190,7 @@ async def _resolve(
             source_type="hls",
             captions=captions,
         )
-        for s in raw_sources
-        if s.get("url") and ".m3u8" in s["url"]
+        for s in candidate_sources
     ]
     return StreamResponse(sources=sources)
 

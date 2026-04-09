@@ -17,9 +17,11 @@ interface Props {
 type Level = { height: number; bitrate: number };
 
 export function VideoPlayer({ src, poster, tracks = [], onReady, onError }: Props) {
-  const videoRef   = useRef<HTMLVideoElement>(null);
-  const hlsRef     = useRef<Hls | null>(null);
-  const wrapRef    = useRef<HTMLDivElement>(null);
+  const videoRef     = useRef<HTMLVideoElement>(null);
+  const hlsRef       = useRef<Hls | null>(null);
+  const wrapRef      = useRef<HTMLDivElement>(null);
+  const netRetryRef  = useRef(0);
+  const mediaRetryRef = useRef(0);
 
   const [muted,       setMuted]       = useState(true);
   const [buffering,   setBuffering]   = useState(true);
@@ -38,6 +40,8 @@ export function VideoPlayer({ src, poster, tracks = [], onReady, onError }: Prop
     hlsRef.current = null;
 
     // Reset state
+    netRetryRef.current  = 0;
+    mediaRetryRef.current = 0;
     setMuted(true);
     setBuffering(true);
     setLevels([]);
@@ -93,9 +97,24 @@ export function VideoPlayer({ src, poster, tracks = [], onReady, onError }: Prop
       hls.on(Hls.Events.ERROR, (_e, d) => {
         if (!d.fatal) return;
         if (d.type === Hls.ErrorTypes.NETWORK_ERROR) {
-          hls.startLoad();
+          // Give up after 3 network retries so the WatchPage can switch sources
+          if (netRetryRef.current < 3) {
+            netRetryRef.current++;
+            hls.startLoad();
+          } else {
+            hls.destroy();
+            setErrMsg("Stream unavailable");
+            onError?.(d.type);
+          }
         } else if (d.type === Hls.ErrorTypes.MEDIA_ERROR) {
-          hls.recoverMediaError();
+          if (mediaRetryRef.current < 2) {
+            mediaRetryRef.current++;
+            hls.recoverMediaError();
+          } else {
+            hls.destroy();
+            setErrMsg("Stream unavailable");
+            onError?.(d.type);
+          }
         } else {
           setErrMsg("Stream unavailable");
           onError?.(d.type);
