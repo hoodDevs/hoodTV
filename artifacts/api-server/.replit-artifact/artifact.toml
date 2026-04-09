@@ -13,9 +13,10 @@ paths = ["/api"]
 run = "cd /home/runner/workspace && PORT=8080 uv run python artifacts/api-server-py/main.py"
 
 [services.production]
+build = ["bash", "-c", "pip install -r artifacts/api-server-py/requirements.txt"]
 
 [services.production.run]
-args = ["bash", "-c", "cd /home/runner/workspace && uv run python artifacts/api-server-py/main.py"]
+args = ["bash", "-c", "cd /home/runner/workspace && python artifacts/api-server-py/main.py"]
 
 [services.production.run.env]
 PORT = "8080"
