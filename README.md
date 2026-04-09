@@ -143,8 +143,8 @@ The platform works with only `TMDB_API_KEY` set. Optional keys enable additional
 - Express.js (Node.js — MovieBox, YouTube service)
 - [YouTube.js](https://github.com/LuanRT/YouTube.js) for native YTMusic API + URL deciphering via Node.js `vm`
 - Go `net/http` reverse proxy
-- Scala + sttp (API gateway)
-- Rust + Axum (health service)
+- Scala 3 + JVM standard library (`com.sun.net.httpserver`) as API gateway
+- Rust + Actix-web (health service)
 
 **Data**
 - [TMDB API](https://developer.themoviedb.org/) — all movie/TV metadata
