@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { Link, useLocation } from "wouter";
 import { Play, Plus, Check, Film, Tv, X, Bookmark, TrendingUp, Star, Clock } from "lucide-react";
-import { Navbar } from "@/components/Navbar";
 import { useWatchlist } from "@/hooks/useWatchlist";
 import type { MediaItem } from "@/lib/api";
 
@@ -208,7 +207,6 @@ export default function MyListPage() {
 
   return (
     <div className="min-h-screen" style={{ backgroundColor: "#0a0a0a", color: "#f0f0f0" }}>
-      <Navbar />
 
       {watchlist.length === 0 ? (
         <div

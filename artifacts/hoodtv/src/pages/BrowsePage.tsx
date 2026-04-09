@@ -1,5 +1,4 @@
 import { useState, useEffect } from "react";
-import { Navbar } from "@/components/Navbar";
 import { MediaCard } from "@/components/MediaCard";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getMovies, getTVShows, getTMDBMovieGenres, getTMDBTVGenres } from "@/lib/api";
@@ -62,12 +61,11 @@ export default function BrowsePage({ type }: BrowsePageProps) {
 
   return (
     <div className="min-h-screen" style={{ backgroundColor: "#0a0a0a", color: "#f0f0f0" }}>
-      <Navbar />
 
       {/* Page header */}
       <div
         style={{
-          paddingTop: "100px",
+          paddingTop: "48px",
           paddingBottom: "40px",
           paddingLeft: "40px",
           paddingRight: "40px",

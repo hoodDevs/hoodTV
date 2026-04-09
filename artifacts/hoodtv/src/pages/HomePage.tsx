@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import { Navbar } from "@/components/Navbar";
 import { HeroSection } from "@/components/HeroSection";
 import { ContentRow } from "@/components/ContentRow";
 import { SpotlightSection } from "@/components/SpotlightSection";
@@ -88,7 +87,6 @@ export default function HomePage() {
 
   return (
     <div className="min-h-screen" style={{ backgroundColor: "#0a0a0a", color: "#f0f0f0" }}>
-      <Navbar />
       <HeroSection items={trending} />
 
       <main style={{ paddingBottom: "60px", marginTop: "-2px", position: "relative", zIndex: 10 }}>

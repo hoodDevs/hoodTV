@@ -1,7 +1,6 @@
 import { useState, useEffect } from "react";
 import { useParams, useLocation, Link } from "wouter";
 import { Play, Plus, Check, ChevronDown, X, ArrowLeft, Clock } from "lucide-react";
-import { Navbar } from "@/components/Navbar";
 import { MediaCard } from "@/components/MediaCard";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getTitleDetails, getSeasonEpisodes } from "@/lib/api";
@@ -49,7 +48,6 @@ export default function TitlePage() {
   if (loading) {
     return (
       <div className="min-h-screen" style={{ backgroundColor: "#0a0a0a" }}>
-        <Navbar />
         <div className="w-full animate-pulse" style={{ height: "70vh", background: "#111" }} />
         <div className="px-8 py-8 max-w-7xl mx-auto" style={{ marginTop: "-140px", position: "relative", zIndex: 10 }}>
           <div className="flex gap-8">
@@ -76,7 +74,6 @@ export default function TitlePage() {
 
   return (
     <div className="min-h-screen" style={{ backgroundColor: "#0a0a0a", color: "#f0f0f0" }} data-testid="title-page">
-      <Navbar />
 
       {/* Hero backdrop */}
       <div className="relative w-full" style={{ height: "72vh", minHeight: "480px", overflow: "hidden" }}>

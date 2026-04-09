@@ -1,19 +1,13 @@
 import { useState, useEffect } from "react";
 import { Link, useLocation } from "wouter";
-import { Search, X, Menu } from "lucide-react";
+import { Home, Film, Tv, TrendingUp, Bookmark, Search, X } from "lucide-react";
+
+export const SIDEBAR_WIDTH = 220;
 
 export function Navbar() {
-  const [scrolled, setScrolled] = useState(false);
-  const [mobileOpen, setMobileOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [location, setLocation] = useLocation();
-
-  useEffect(() => {
-    const handleScroll = () => setScrolled(window.scrollY > 60);
-    window.addEventListener("scroll", handleScroll);
-    return () => window.removeEventListener("scroll", handleScroll);
-  }, []);
 
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
@@ -37,140 +31,160 @@ export function Navbar() {
   };
 
   const navLinks = [
-    { label: "Home", href: "/" },
-    { label: "Movies", href: "/movies" },
-    { label: "TV Shows", href: "/tv" },
-    { label: "Trending", href: "/trending" },
-    { label: "My List", href: "/mylist" },
+    { label: "Home", href: "/", icon: Home },
+    { label: "Movies", href: "/movies", icon: Film },
+    { label: "TV Shows", href: "/tv", icon: Tv },
+    { label: "Trending", href: "/trending", icon: TrendingUp },
+    { label: "My List", href: "/mylist", icon: Bookmark },
   ];
-
-  const isHome = location === "/";
-  const isTransparent = isHome && !scrolled;
 
   return (
     <>
       <nav
         data-testid="navbar"
-        className="fixed top-0 left-0 right-0 z-50 flex items-center justify-between transition-all duration-400"
         style={{
-          height: "68px",
-          padding: "0 40px",
-          background: scrolled || !isHome
-            ? "rgba(10,10,10,0.92)"
-            : "transparent",
-          backdropFilter: scrolled || !isHome ? "blur(14px)" : "none",
-          borderBottom: scrolled || !isHome
-            ? "0.5px solid rgba(255,255,255,0.06)"
-            : "none",
+          position: "fixed",
+          top: 0,
+          left: 0,
+          bottom: 0,
+          width: `${SIDEBAR_WIDTH}px`,
+          zIndex: 50,
+          display: "flex",
+          flexDirection: "column",
+          background: "rgba(8,8,14,0.97)",
+          backdropFilter: "blur(20px)",
+          WebkitBackdropFilter: "blur(20px)",
+          borderRight: "0.5px solid rgba(255,255,255,0.07)",
         }}
       >
-        <div className="flex items-center gap-9">
-          <Link href="/" data-testid="nav-logo">
-            <div
-              style={{
-                fontFamily: "'Bebas Neue', sans-serif",
-                fontSize: "28px",
-                letterSpacing: "2px",
-                color: "#fff",
-                lineHeight: 1,
-              }}
-            >
-              ho<span style={{ color: "#7F77DD" }}>o</span>dTV
-            </div>
-          </Link>
-          <div className="hidden md:flex items-center gap-7">
-            {navLinks.map((link) => {
-              const basePath = link.href.split("?")[0];
-              const isActive =
-                basePath === "/" ? location === "/" : location.startsWith(basePath);
-              return (
-                <Link
-                  key={link.href}
-                  href={link.href}
-                  data-testid={`nav-link-${link.label.toLowerCase().replace(/\s/g, "-")}`}
-                  style={{
-                    fontSize: "13px",
-                    fontWeight: 400,
-                    color: isActive ? "#f0f0f0" : "#888",
-                    letterSpacing: "0.04em",
-                    transition: "color 0.2s",
-                  }}
-                  className="hover:!text-white"
-                >
-                  {link.label}
-                </Link>
-              );
-            })}
+        {/* Logo */}
+        <Link href="/" data-testid="nav-logo">
+          <div
+            style={{
+              padding: "28px 24px 32px",
+              fontFamily: "'Bebas Neue', sans-serif",
+              fontSize: "26px",
+              letterSpacing: "2px",
+              color: "#fff",
+              lineHeight: 1,
+              cursor: "pointer",
+            }}
+          >
+            ho<span style={{ color: "#7F77DD" }}>o</span>dTV
           </div>
+        </Link>
+
+        {/* Nav links */}
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "2px", padding: "0 12px" }}>
+          {navLinks.map(({ label, href, icon: Icon }) => {
+            const basePath = href.split("?")[0];
+            const isActive = basePath === "/" ? location === "/" : location.startsWith(basePath);
+            return (
+              <Link
+                key={href}
+                href={href}
+                data-testid={`nav-link-${label.toLowerCase().replace(/\s/g, "-")}`}
+              >
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "12px",
+                    padding: "10px 14px",
+                    borderRadius: "10px",
+                    cursor: "pointer",
+                    background: isActive ? "rgba(127,119,221,0.15)" : "transparent",
+                    color: isActive ? "#c0bdf5" : "#666",
+                    transition: "background 0.18s, color 0.18s",
+                    fontSize: "13.5px",
+                    fontWeight: isActive ? 500 : 400,
+                    letterSpacing: "0.02em",
+                  }}
+                  className="sidebar-link"
+                >
+                  <Icon
+                    size={17}
+                    strokeWidth={isActive ? 2.2 : 1.8}
+                    style={{ flexShrink: 0, color: isActive ? "#9D97E8" : "#555" }}
+                  />
+                  {label}
+                </div>
+              </Link>
+            );
+          })}
         </div>
 
-        <div className="flex items-center gap-5">
+        {/* Bottom actions */}
+        <div style={{ padding: "16px 12px 28px", display: "flex", flexDirection: "column", gap: "4px" }}>
           <button
             onClick={() => setSearchOpen(true)}
             data-testid="nav-search"
-            style={{ background: "none", border: "none", cursor: "pointer", color: "#888", padding: "4px" }}
-            className="hover:!text-white transition-colors"
-          >
-            <Search size={18} />
-          </button>
-          <div
             style={{
-              width: "32px",
-              height: "32px",
-              borderRadius: "8px",
-              background: "rgba(127,119,221,0.15)",
-              border: "1.5px solid #7F77DD",
               display: "flex",
               alignItems: "center",
-              justifyContent: "center",
-              fontSize: "13px",
-              fontWeight: 500,
-              color: "#7F77DD",
+              gap: "12px",
+              padding: "10px 14px",
+              borderRadius: "10px",
+              background: "none",
+              border: "none",
               cursor: "pointer",
-              letterSpacing: "0.5px",
+              color: "#666",
+              fontSize: "13.5px",
+              fontWeight: 400,
+              letterSpacing: "0.02em",
+              width: "100%",
+              transition: "background 0.18s, color 0.18s",
+            }}
+            className="sidebar-link"
+          >
+            <Search size={17} strokeWidth={1.8} style={{ flexShrink: 0, color: "#555" }} />
+            Search
+          </button>
+
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "12px",
+              padding: "10px 14px",
+              borderRadius: "10px",
+              cursor: "pointer",
+              color: "#666",
+              fontSize: "13.5px",
+              fontWeight: 400,
+              letterSpacing: "0.02em",
             }}
           >
-            HT
+            <div
+              style={{
+                width: "26px",
+                height: "26px",
+                borderRadius: "7px",
+                background: "rgba(127,119,221,0.15)",
+                border: "1.5px solid #7F77DD",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                fontSize: "11px",
+                fontWeight: 600,
+                color: "#9D97E8",
+                flexShrink: 0,
+              }}
+            >
+              HT
+            </div>
+            Profile
           </div>
-          <button
-            className="md:hidden text-[#888] hover:text-white transition-colors"
-            onClick={() => setMobileOpen(!mobileOpen)}
-            data-testid="nav-mobile-toggle"
-          >
-            {mobileOpen ? <X size={22} /> : <Menu size={22} />}
-          </button>
         </div>
       </nav>
 
-      {mobileOpen && (
-        <div
-          className="fixed top-[68px] left-0 right-0 z-40 md:hidden"
-          style={{
-            background: "rgba(10,10,10,0.97)",
-            backdropFilter: "blur(14px)",
-            borderBottom: "0.5px solid rgba(255,255,255,0.08)",
-          }}
-        >
-          {navLinks.map((link) => (
-            <Link
-              key={link.href}
-              href={link.href}
-              className="block px-8 py-3 text-sm text-[#888] hover:text-white transition-colors"
-              onClick={() => setMobileOpen(false)}
-            >
-              {link.label}
-            </Link>
-          ))}
-        </div>
-      )}
-
-      {/* Search Overlay */}
+      {/* Search overlay */}
       <div
         style={{
           position: "fixed",
           inset: 0,
           zIndex: 200,
-          background: "rgba(10,10,10,0.96)",
+          background: "rgba(5,5,12,0.96)",
           display: "flex",
           alignItems: "flex-start",
           justifyContent: "center",
@@ -217,7 +231,7 @@ export function Navbar() {
                 style={{ background: "none", border: "none", cursor: "pointer", color: "#888", fontSize: "24px", lineHeight: 1 }}
                 className="hover:!text-white transition-colors"
               >
-                ✕
+                <X size={20} />
               </button>
             </div>
           </form>
@@ -226,6 +240,16 @@ export function Navbar() {
           </p>
         </div>
       </div>
+
+      <style>{`
+        .sidebar-link:hover {
+          background: rgba(255,255,255,0.05) !important;
+          color: #d0cef5 !important;
+        }
+        .sidebar-link:hover svg {
+          color: #9D97E8 !important;
+        }
+      `}</style>
     </>
   );
 }

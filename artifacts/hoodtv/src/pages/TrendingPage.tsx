@@ -1,7 +1,6 @@
 import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { Play, Plus, Check, TrendingUp } from "lucide-react";
-import { Navbar } from "@/components/Navbar";
 import { getTrending } from "@/lib/api";
 import type { MediaItem } from "@/lib/api";
 import { useWatchlist } from "@/hooks/useWatchlist";
@@ -386,10 +385,9 @@ export default function TrendingPage() {
 
   return (
     <div className="min-h-screen" style={{ backgroundColor: "#0a0a0a", color: "#f0f0f0" }}>
-      <Navbar />
 
       {/* Header */}
-      <div style={{ padding: "96px 40px 32px", borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
+      <div style={{ padding: "48px 40px 32px", borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
         <div style={{ maxWidth: "1100px", margin: "0 auto" }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "16px" }}>
             <div style={{ display: "flex", alignItems: "center", gap: "14px" }}>

@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { Search, X, Film, Tv } from "lucide-react";
 import { useLocation } from "wouter";
-import { Navbar } from "@/components/Navbar";
 import { MediaCard } from "@/components/MediaCard";
 import { Skeleton } from "@/components/ui/skeleton";
 import { searchContent, getSearchSuggestions } from "@/lib/api";
@@ -89,8 +88,7 @@ export default function SearchPage() {
 
   return (
     <div className="min-h-screen animate-fade-in" style={{ backgroundColor: "#0a0a0a" }}>
-      <Navbar />
-      <div className="pt-24 px-4 sm:px-8 pb-12 max-w-7xl mx-auto">
+      <div className="pt-10 px-4 sm:px-8 pb-12 max-w-7xl mx-auto">
         <div className="relative max-w-2xl mx-auto mb-10" ref={wrapperRef}>
           <Search
             size={22}
