@@ -18,32 +18,39 @@ interface Props {
 type Level = { height: number; bitrate: number };
 
 export function VideoPlayer({ src, poster, tracks = [], onReady, onError, sourceType }: Props) {
-  const videoRef     = useRef<HTMLVideoElement>(null);
-  const hlsRef       = useRef<Hls | null>(null);
-  const wrapRef      = useRef<HTMLDivElement>(null);
-  const netRetryRef  = useRef(0);
+  const videoRef      = useRef<HTMLVideoElement>(null);
+  const hlsRef        = useRef<Hls | null>(null);
+  const wrapRef       = useRef<HTMLDivElement>(null);
+  const netRetryRef   = useRef(0);
   const mediaRetryRef = useRef(0);
 
-  const [muted,         setMuted]       = useState(true);
-  const [buffering,     setBuffering]   = useState(true);
-  const [levels,        setLevels]      = useState<Level[]>([]);
-  const [curLevel,      setCurLevel]    = useState(-1);
-  const [qOpen,         setQOpen]       = useState(false);
-  const [errMsg,        setErrMsg]      = useState("");
-  const [needsClick,    setNeedsClick]  = useState(false);
-  const [playAttempted, setPlayAttempted] = useState(false);
+  const [muted,      setMuted]     = useState(true);
+  const [buffering,  setBuffering] = useState(true);
+  const [levels,     setLevels]    = useState<Level[]>([]);
+  const [curLevel,   setCurLevel]  = useState(-1);
+  const [qOpen,      setQOpen]     = useState(false);
+  const [errMsg,     setErrMsg]    = useState("");
+  const [needsClick, setNeedsClick] = useState(false);
 
-  // ── initialise / re-initialise whenever src changes ──────────────────────
+  // ref callback: set muted=true immediately on DOM creation
+  // (React's `muted` prop has a known bug and doesn't always apply to the DOM)
+  const setVideoRef = useCallback((el: HTMLVideoElement | null) => {
+    (videoRef as React.MutableRefObject<HTMLVideoElement | null>).current = el;
+    if (el) {
+      el.muted  = true;
+      el.setAttribute("muted", "");  // set HTML attribute too (Chrome autoplay policy checks this)
+      el.volume = 1;
+    }
+  }, []);
+
   useEffect(() => {
     const video = videoRef.current;
     if (!video || !src) return;
 
-    // Tear down any previous instance
     hlsRef.current?.destroy();
     hlsRef.current = null;
 
-    // Reset state
-    netRetryRef.current  = 0;
+    netRetryRef.current   = 0;
     mediaRetryRef.current = 0;
     setMuted(true);
     setBuffering(true);
@@ -52,33 +59,27 @@ export function VideoPlayer({ src, poster, tracks = [], onReady, onError, source
     setQOpen(false);
     setErrMsg("");
     setNeedsClick(false);
-    setPlayAttempted(false);
 
-    video.muted = true;
+    video.muted  = true;
     video.volume = 1;
 
     const onWaiting = () => setBuffering(true);
-    const onPlaying = () => { setBuffering(false); };
+    const onPlaying = () => setBuffering(false);
     const onCanPlay = () => setBuffering(false);
-    video.addEventListener("waiting",  onWaiting);
-    video.addEventListener("playing",  onPlaying);
-    video.addEventListener("canplay",  onCanPlay);
+    video.addEventListener("waiting", onWaiting);
+    video.addEventListener("playing", onPlaying);
+    video.addEventListener("canplay", onCanPlay);
 
+    // ── MP4 native path ──────────────────────────────────────────────────────
     if (sourceType === "mp4") {
-      // ── Native MP4 — use the video element directly ──────────────────────
       video.src = src;
       if (poster) video.poster = poster;
-      const onVideoError = () => {
-        setErrMsg("Stream unavailable");
-        onError?.(4);
-      };
+      const onVideoError = () => { setErrMsg("Stream unavailable"); onError?.(4); };
       video.addEventListener("error", onVideoError);
-      setPlayAttempted(true);
-      video.play().catch(() => {
-        setNeedsClick(true);
-        setBuffering(false);
-      });
+
+      video.play().catch(() => setNeedsClick(true));
       onReady?.(video);
+
       return () => {
         video.removeEventListener("waiting",  onWaiting);
         video.removeEventListener("playing",  onPlaying);
@@ -86,7 +87,10 @@ export function VideoPlayer({ src, poster, tracks = [], onReady, onError, source
         video.removeEventListener("error",    onVideoError);
         video.src = "";
       };
-    } else if (Hls.isSupported()) {
+    }
+
+    // ── HLS.js path ──────────────────────────────────────────────────────────
+    if (Hls.isSupported()) {
       const hls = new Hls({
         enableWorker:           false,
         lowLatencyMode:         false,
@@ -104,11 +108,20 @@ export function VideoPlayer({ src, poster, tracks = [], onReady, onError, source
       hls.on(Hls.Events.MANIFEST_PARSED, (_e, d) => {
         setLevels(d.levels.map((l) => ({ height: l.height, bitrate: l.bitrate })));
         setCurLevel(hls.currentLevel);
-        setPlayAttempted(true);
-        video.play().catch(() => {
-          setNeedsClick(true);
-          setBuffering(false);
-        });
+
+        // Attempt muted autoplay. Chrome always allows muted play.
+        video.muted = true;
+        video.play()
+          .then(() => {
+            // Playing muted — show unmute button (muted=true already)
+            setBuffering(false);
+          })
+          .catch(() => {
+            // Autoplay blocked entirely — show click-to-play
+            setNeedsClick(true);
+            setBuffering(false);
+          });
+
         onReady?.(video);
       });
 
@@ -117,7 +130,6 @@ export function VideoPlayer({ src, poster, tracks = [], onReady, onError, source
       hls.on(Hls.Events.ERROR, (_e, d) => {
         if (!d.fatal) return;
         if (d.type === Hls.ErrorTypes.NETWORK_ERROR) {
-          // Give up after 3 network retries so the WatchPage can switch sources
           if (netRetryRef.current < 3) {
             netRetryRef.current++;
             hls.startLoad();
@@ -145,14 +157,11 @@ export function VideoPlayer({ src, poster, tracks = [], onReady, onError, source
       hls.attachMedia(video);
 
     } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
-      // Safari: native HLS
+      // Safari native HLS
       video.src = src;
       if (poster) video.poster = poster;
-      video.play().catch(() => {});
-      video.addEventListener("error", () => {
-        setErrMsg("Stream unavailable");
-        onError?.(4);
-      });
+      video.play().catch(() => setNeedsClick(true));
+      video.addEventListener("error", () => { setErrMsg("Stream unavailable"); onError?.(4); });
       onReady?.(video);
     } else {
       setErrMsg("HLS not supported in this browser");
@@ -179,15 +188,41 @@ export function VideoPlayer({ src, poster, tracks = [], onReady, onError, source
     return () => document.removeEventListener("mousedown", h);
   }, []);
 
-  const startPlay = useCallback(() => {
+  // click-to-play / unmute button handler
+  const startPlay = useCallback(async () => {
+    const v = videoRef.current;
+    if (!v) return;
+
+    // First try unmuted play (user gesture is active)
+    v.muted = false;
+    v.volume = 1;
+    try {
+      await v.play();
+      setMuted(false);
+      setNeedsClick(false);
+      setBuffering(false);
+    } catch {
+      // Unmuted play blocked — try muted as fallback
+      v.muted = true;
+      try {
+        await v.play();
+        setMuted(true);       // still muted but playing — unmute btn appears
+        setNeedsClick(false);
+        setBuffering(false);
+      } catch {
+        // Even muted play failed — re-show the click button
+        setNeedsClick(true);
+        setBuffering(false);
+      }
+    }
+  }, []);
+
+  const unmute = useCallback(() => {
     const v = videoRef.current;
     if (!v) return;
     v.muted  = false;
     v.volume = 1;
     setMuted(false);
-    setNeedsClick(false);
-    setBuffering(true);
-    v.play().catch(() => { setBuffering(false); });
   }, []);
 
   const setQuality = useCallback((lvl: number) => {
@@ -209,13 +244,12 @@ export function VideoPlayer({ src, poster, tracks = [], onReady, onError, source
 
   return (
     <div ref={wrapRef} style={S.wrap}>
-      {/* native video with browser controls */}
       <video
-        ref={videoRef}
+        ref={setVideoRef}
         style={S.video}
         controls
         playsInline
-        muted
+        autoPlay
         poster={poster}
         preload="auto"
       >
@@ -229,20 +263,24 @@ export function VideoPlayer({ src, poster, tracks = [], onReady, onError, source
         })}
       </video>
 
-      {/* buffering ring */}
-      {buffering && !errMsg && <div style={S.spinner} />}
+      {/* buffering spinner */}
+      {buffering && !errMsg && !needsClick && <div style={S.spinner} />}
 
       {/* error overlay */}
       {errMsg && (
         <div style={S.errOverlay}>
           <div style={S.errBox}>
-            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#c0bdf5" strokeWidth="1.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#c0bdf5" strokeWidth="1.5">
+              <circle cx="12" cy="12" r="10"/>
+              <line x1="12" y1="8" x2="12" y2="12"/>
+              <line x1="12" y1="16" x2="12.01" y2="16"/>
+            </svg>
             <p style={S.errText}>{errMsg}</p>
           </div>
         </div>
       )}
 
-      {/* click-to-play overlay — shown when autoplay is blocked */}
+      {/* click-to-play overlay — autoplay was blocked entirely */}
       {needsClick && !errMsg && (
         <div style={S.playOverlay} onClick={startPlay}>
           <div style={S.playBtn}>
@@ -250,22 +288,23 @@ export function VideoPlayer({ src, poster, tracks = [], onReady, onError, source
               <polygon points="5 3 19 12 5 21 5 3"/>
             </svg>
           </div>
-          <p style={S.playHint}>Click to play</p>
+          <p style={S.playHint}>Tap to play</p>
         </div>
       )}
 
-      {/* unmute overlay — shown after playback starts while still muted */}
-      {playAttempted && muted && !needsClick && !errMsg && (
-        <button style={S.unmuteBtn} onClick={startPlay}>
+      {/* unmute button — video is playing but muted */}
+      {!needsClick && !errMsg && muted && (
+        <button style={S.unmuteBtn} onClick={unmute}>
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
-            <line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/>
+            <line x1="23" y1="9" x2="17" y2="15"/>
+            <line x1="17" y1="9" x2="23" y2="15"/>
           </svg>
           Tap to unmute
         </button>
       )}
 
-      {/* quality switcher — only when multiple levels exist */}
+      {/* quality switcher */}
       {levels.length > 1 && !errMsg && (
         <div style={S.qWrap} className="hd-qmenu">
           <button style={S.qBtn} onClick={() => setQOpen(o => !o)}>
@@ -291,7 +330,7 @@ export function VideoPlayer({ src, poster, tracks = [], onReady, onError, source
   );
 }
 
-// ── inline styles ─────────────────────────────────────────────────────────
+// ── inline styles ─────────────────────────────────────────────────────────────
 const A = "rgba";
 const S: Record<string, React.CSSProperties> = {
   wrap: {
@@ -457,7 +496,6 @@ const S: Record<string, React.CSSProperties> = {
   },
 };
 
-// inject keyframe animations once
 if (typeof document !== "undefined" && !document.getElementById("hd-kf")) {
   const st = document.createElement("style");
   st.id = "hd-kf";
