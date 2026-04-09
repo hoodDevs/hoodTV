@@ -13,8 +13,8 @@ const HOST_POOL = [
   "https://api.inmoviebox.com",
 ];
 
-const SECRET_KEY_DEFAULT = "76iRl07s0xSN9jqmEWAt79EBJZulIQIsV64FZr2O";
-const SECRET_KEY_ALT = "Xqn2nnO41/L92o1iuXhSLHTbXvY4Z5ZZ62m8mSLA";
+const SECRET_KEY_DEFAULT = process.env.MOVIEBOX_SECRET_KEY || "";
+const SECRET_KEY_ALT = process.env.MOVIEBOX_SECRET_KEY_ALT || "";
 const RETRY_STATUS_CODES = new Set([403, 407, 429, 500, 502, 503, 504]);
 
 const ANDROID_VERSIONS = [
