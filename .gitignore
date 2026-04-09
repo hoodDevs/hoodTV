@@ -54,3 +54,19 @@ __pycache__/
 *.pyo
 .venv/
 uv.lock
+
+# Rust build artifacts
+target/
+artifacts/rust-health/target/
+
+# Go build artifacts
+artifacts/go-proxy/go-proxy-bin
+*.exe
+
+# Scala / JVM build cache
+artifacts/scala-gateway/.scala-build/
+.bsp/
+.metals/
+
+# Generic large binaries
+*.wasm.bak
