@@ -1,20 +1,21 @@
 /**
- * hoodTV Feed Algorithm v2
+ * hoodTV Feed Algorithm v3
  *
- * Key improvements over v1:
- *  - Time-decay: interactions lose weight exponentially (half-life 7 days)
- *  - Multi-genre matching: one video can score across multiple genres
- *  - Author affinity: tracks clicked artists, boosts their content in queries
- *  - Score-weighted blending: dominant genres get proportionally more query weight
- *  - Diversity injection: periodically surfaces a non-dominant genre
- *  - Bounded storage: interaction log capped at 200 entries
- *  - Confidence staging: feed personalises gradually as signal accumulates
+ * v3 additions over v2:
+ *  - Multi-query parallel fetch: buildFeedQueries() returns 2-3 queries
+ *    that the home page fires in parallel and interleaves
+ *  - Query rotation: feedIteration counter cycles variant suffixes so each
+ *    "For You" visit surfaces different videos
+ *  - Negative chip signal: switching away from a chip records a mild penalty
+ *  - Recency preference: parses publishedAt to learn new-vs-classic taste,
+ *    appends year modifiers to queries accordingly
+ *  - Watch history dedup: callers can get watchedIds to filter displayed videos
  */
 
-const STORAGE_KEY = "hoodtv_feed_v2";
-const HALF_LIFE_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
-const MAX_LOG = 200;
-const MAX_WATCHED = 100;
+const STORAGE_KEY = "hoodtv_feed_v3";
+const HALF_LIFE_MS = 7 * 24 * 60 * 60 * 1000;
+const MAX_LOG = 300;
+const MAX_WATCHED = 150;
 
 export interface ChipDef {
   label: string;
@@ -23,8 +24,6 @@ export interface ChipDef {
 }
 
 // ──── Genre signal map ─────────────────────────────────────────────────────────
-// Each entry is an array of substrings matched against (title + author).toLowerCase()
-// Longer, more specific strings are matched first within the loop.
 
 const GENRE_SIGNALS: Record<string, string[]> = {
   "Hip Hop": [
@@ -91,11 +90,11 @@ const GENRE_SIGNALS: Record<string, string[]> = {
   ],
 };
 
-// ──── Storage types ────────────────────────────────────────────────────────────
+// ──── Storage ──────────────────────────────────────────────────────────────────
 
 interface InteractionEntry {
   genre: string;
-  points: number;
+  points: number; // negative values allowed (penalties)
   ts: number;
 }
 
@@ -104,22 +103,29 @@ interface FeedStore {
   watchedIds: string[];
   authorCounts: Record<string, number>;
   totalInteractions: number;
+  feedIteration: number;   // cycles query variant suffixes
+  recencyScore: number;    // + = prefers new, - = prefers classic
 }
 
 function emptyStore(): FeedStore {
-  return { log: [], watchedIds: [], authorCounts: {}, totalInteractions: 0 };
+  return {
+    log: [], watchedIds: [], authorCounts: {},
+    totalInteractions: 0, feedIteration: 0, recencyScore: 0,
+  };
 }
 
 function load(): FeedStore {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return emptyStore();
-    const parsed = JSON.parse(raw) as FeedStore;
+    const p = JSON.parse(raw) as FeedStore;
     return {
-      log: parsed.log ?? [],
-      watchedIds: parsed.watchedIds ?? [],
-      authorCounts: parsed.authorCounts ?? {},
-      totalInteractions: parsed.totalInteractions ?? 0,
+      log: p.log ?? [],
+      watchedIds: p.watchedIds ?? [],
+      authorCounts: p.authorCounts ?? {},
+      totalInteractions: p.totalInteractions ?? 0,
+      feedIteration: p.feedIteration ?? 0,
+      recencyScore: p.recencyScore ?? 0,
     };
   } catch {
     return emptyStore();
@@ -130,8 +136,7 @@ function save(store: FeedStore) {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(store));
   } catch {
-    // Quota exceeded — trim log and retry once
-    store.log = store.log.slice(-50);
+    store.log = store.log.slice(-60);
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(store)); } catch { /* give up */ }
   }
 }
@@ -147,50 +152,75 @@ function computeDecayedScores(log: InteractionEntry[]): Record<string, number> {
   for (const { genre, points, ts } of log) {
     scores[genre] = (scores[genre] ?? 0) + points * decayFactor(ts);
   }
+  // Floor at 0: negative totals don't invert rankings, they just zero out
+  for (const k of Object.keys(scores)) {
+    if (scores[k] < 0) scores[k] = 0;
+  }
   return scores;
 }
 
-/**
- * Infer genre(s) from video metadata.
- * Returns scored matches across ALL genres (not just the first hit).
- * When multiple genres match, points are divided proportionally.
- */
 function inferGenres(title: string, author: string): Array<{ genre: string; strength: number }> {
   const text = (title + " " + author).toLowerCase();
   const hits: Array<{ genre: string; matchCount: number }> = [];
 
   for (const [genre, keywords] of Object.entries(GENRE_SIGNALS)) {
-    let matchCount = 0;
-    for (const kw of keywords) {
-      if (text.includes(kw)) matchCount++;
-    }
-    if (matchCount > 0) hits.push({ genre, matchCount });
+    let n = 0;
+    for (const kw of keywords) if (text.includes(kw)) n++;
+    if (n > 0) hits.push({ genre, matchCount: n });
   }
 
   if (!hits.length) return [];
 
-  // Strength = sqrt(matchCount) to reward more signals but with diminishing returns
   const raw = hits.map((h) => ({ genre: h.genre, strength: Math.sqrt(h.matchCount) }));
   const total = raw.reduce((s, r) => s + r.strength, 0);
-
-  // Normalize so total strength across all genres = 1.5 per video click
   return raw.map((r) => ({ genre: r.genre, strength: (r.strength / total) * 1.5 }));
 }
 
-// ──── Diversity injection ──────────────────────────────────────────────────────
+/** Parse publishedAt text ("3 days ago", "2 years ago") → recency signal. */
+function parseRecencySignal(publishedAt: string): number {
+  if (!publishedAt) return 0;
+  const s = publishedAt.toLowerCase();
+  if (/hour|day|week/.test(s)) return 1;          // very new → +1
+  if (/\d+ month/.test(s)) return 0.5;            // recent-ish → +0.5
+  const yMatch = s.match(/(\d+)\s*year/);
+  if (yMatch) {
+    const yrs = parseInt(yMatch[1]);
+    if (yrs <= 2) return 0;
+    if (yrs <= 5) return -0.5;
+    return -1;                                     // classic → -1
+  }
+  return 0;
+}
 
-/**
- * Returns true on ~25% of days (deterministic per calendar day).
- * This lets the feed occasionally surface a non-dominant genre.
- */
-function isDiversityDay(): boolean {
-  const dayIndex = Math.floor(Date.now() / (24 * 60 * 60 * 1000));
-  return dayIndex % 4 === 0;
+// ──── Query building helpers ───────────────────────────────────────────────────
+
+// Suffix variants cycled per feedIteration so each "For You" load feels fresh
+const QUERY_VARIANTS = ["official music video", "music video 2024", "new music video", "best music video", "latest music video", "official audio"];
+
+function getVariant(iteration: number): string {
+  return QUERY_VARIANTS[iteration % QUERY_VARIANTS.length];
+}
+
+function isDiversitySession(iteration: number): boolean {
+  return iteration % 4 === 3;
+}
+
+function getTopAuthor(store: FeedStore): string | null {
+  const entry = Object.entries(store.authorCounts)
+    .filter(([, n]) => n >= 3)
+    .sort((a, b) => b[1] - a[1])[0];
+  return entry ? entry[0] : null;
+}
+
+function recencyModifier(recencyScore: number): string {
+  if (recencyScore >= 4) return " new 2025 2024";
+  if (recencyScore <= -4) return " classic best";
+  return "";
 }
 
 // ──── Public API ───────────────────────────────────────────────────────────────
 
-/** Record a chip click. Chip clicks carry more weight than video views. */
+/** Record a chip click (+3 pts to that genre). */
 export function recordChipClick(label: string) {
   if (label === "For You" || label === "All") return;
   const store = load();
@@ -200,25 +230,47 @@ export function recordChipClick(label: string) {
   save(store);
 }
 
-/** Record a video click — infers genres from title/author, tracks author affinity. */
-export function recordVideoClick(videoId: string, title: string, author: string) {
+/**
+ * Mild negative signal when leaving a chip (-0.5 pts).
+ * Helps genres you bounce away from lose weight over time.
+ */
+export function recordChipLeave(label: string) {
+  if (label === "For You" || label === "All") return;
   const store = load();
+  store.log.push({ genre: label, points: -0.5, ts: Date.now() });
+  if (store.log.length > MAX_LOG) store.log = store.log.slice(-MAX_LOG);
+  save(store);
+}
 
-  // Deduplicate within last 100 watched
+/** Record a video click. Infers genre, tracks author affinity + recency preference. */
+export function recordVideoClick(
+  videoId: string,
+  title: string,
+  author: string,
+  publishedAt?: string,
+) {
+  const store = load();
   if (store.watchedIds.includes(videoId)) return;
 
   const matches = inferGenres(title, author);
-
   for (const { genre, strength } of matches) {
     store.log.push({ genre, points: strength, ts: Date.now() });
   }
 
-  // Author affinity: normalise the author name
+  // Author affinity
   const normAuthor = author.trim().toLowerCase();
-  if (normAuthor && normAuthor.length > 1) {
-    store.authorCounts[normAuthor] = (store.authorCounts[normAuthor] ?? 0) + 1;
-    // Cap individual author counts to avoid runaway scores
-    if (store.authorCounts[normAuthor] > 20) store.authorCounts[normAuthor] = 20;
+  if (normAuthor.length > 1) {
+    store.authorCounts[normAuthor] = Math.min(
+      (store.authorCounts[normAuthor] ?? 0) + 1,
+      20,
+    );
+  }
+
+  // Recency preference
+  if (publishedAt) {
+    store.recencyScore = Math.max(-10, Math.min(10,
+      store.recencyScore + parseRecencySignal(publishedAt),
+    ));
   }
 
   if (store.log.length > MAX_LOG) store.log = store.log.slice(-MAX_LOG);
@@ -227,16 +279,17 @@ export function recordVideoClick(videoId: string, title: string, author: string)
   save(store);
 }
 
-/**
- * Confidence levels:
- *  0 = cold start (< 2 interactions)
- *  1 = warming up (2-7)
- *  2 = personalised (8+)
- */
+/** Increment the query rotation counter — call each time "For You" loads. */
+export function incrementFeedIteration() {
+  const store = load();
+  store.feedIteration = (store.feedIteration + 1) % 100;
+  save(store);
+}
+
 export function getConfidenceLevel(): 0 | 1 | 2 {
   const { totalInteractions } = load();
   if (totalInteractions < 2) return 0;
-  if (totalInteractions < 8) return 1;
+  if (totalInteractions < 6) return 1;
   return 2;
 }
 
@@ -244,99 +297,70 @@ export function hasFeedData(): boolean {
   return getConfidenceLevel() >= 1;
 }
 
-/** Returns decayed genre scores. */
 export function getGenreScores(): Record<string, number> {
-  const store = load();
-  return computeDecayedScores(store.log);
+  return computeDecayedScores(load().log);
 }
 
-/** Returns recently watched video IDs. */
-export function getWatchHistory(): string[] {
+export function getWatchedIds(): string[] {
   return load().watchedIds;
 }
 
 /**
- * Build the search query for the "For You" feed.
+ * Returns 1–3 search queries for the "For You" feed.
+ * The home page fires all of them in parallel and interleaves results.
  *
- * Stages:
- *  Cold (0):  trending default
- *  Warming (1): top 1 genre only
- *  Personalised (2): score-weighted blend of top 2-3 genres + optional author boost
- *                    with periodic diversity injection
+ * Cold  (0): ["trending music video"]
+ * Warm  (1): [top genre query]
+ * Full  (2): [top genre (+ author/recency), second genre (+ diversity), trending freshener]
  */
-export function buildFeedQuery(chips: ChipDef[]): string {
+export function buildFeedQueries(chips: ChipDef[]): string[] {
   const store = load();
   const level = getConfidenceLevel();
 
-  if (level === 0) {
-    return "official music video trending 2024";
-  }
+  if (level === 0) return ["trending official music video 2024"];
 
   const scores = computeDecayedScores(store.log);
+  const recMod = recencyModifier(store.recencyScore);
+
+  interface SC { label: string; q: string; score: number; share: number }
+
   const totalScore = Object.values(scores).reduce((s, v) => s + v, 0);
-
-  interface ScoredChip { label: string; q: string; score: number; share: number }
-
-  const scoredChips: ScoredChip[] = chips
+  const ranked: SC[] = chips
     .filter((c) => c.label !== "For You" && c.label !== "All")
     .map((c) => ({ label: c.label, q: c.q, score: scores[c.label] ?? 0, share: 0 }))
     .filter((c) => c.score > 0)
     .sort((a, b) => b.score - a.score)
     .map((c) => ({ ...c, share: totalScore > 0 ? c.score / totalScore : 0 }));
 
-  if (!scoredChips.length) return "official music video trending 2024";
+  if (!ranked.length) return [`trending official music video 2024${recMod}`];
 
-  // Warming-up: just use the single top genre
-  if (level === 1) {
-    return scoredChips[0].q;
-  }
+  // Warming up: just the top genre
+  if (level === 1) return [ranked[0].q + recMod];
 
   // ── Fully personalised ─────────────────────────────────────────────────────
+  const variant = getVariant(store.feedIteration);
+  const topAuthor = getTopAuthor(store);
+  const isDiversity = isDiversitySession(store.feedIteration);
 
-  const top = scoredChips[0];
-  const second = scoredChips[1];
-  const third = scoredChips[2];
+  const queries: string[] = [];
 
-  // Diversity injection: on diversity days, swap 2nd slot for a lower-ranked genre
-  let secondSlot = second;
-  if (isDiversityDay() && third && second) {
-    secondSlot = third; // surface the 3rd genre instead
+  // ① Primary: author-boosted if available, else top genre + variant + recency
+  if (topAuthor) {
+    queries.push(`${topAuthor} official music video`);
+  } else {
+    queries.push(`${ranked[0].q}${recMod} ${variant}`.trim());
   }
 
-  // Author affinity: pick the top author clicked 3+ times (using original casing lost, so lowercase)
-  const topAuthorEntry = Object.entries(store.authorCounts)
-    .filter(([, count]) => count >= 3)
-    .sort((a, b) => b[1] - a[1])[0];
-  const topAuthor = topAuthorEntry ? topAuthorEntry[0] : null;
-
-  // Build the blended query
-  const topTerms = top.q.split(" ");
-
-  // Dominant genre (>70%): single-genre query, optionally author-boosted
-  if (top.share > 0.7 || !secondSlot) {
-    const base = topTerms.slice(0, 4).join(" ");
-    if (topAuthor) return `${topAuthor} ${base}`;
-    return top.q;
+  // ② Secondary: diversity swaps 2nd → 3rd genre; else just 2nd genre
+  const secondGenre = isDiversity && ranked[2] ? ranked[2] : ranked[1];
+  if (secondGenre) {
+    queries.push(secondGenre.q + recMod);
   }
 
-  // Blended: weight term counts by score share
-  // e.g. top=60% → 4 terms, second=40% → 3 terms
-  const topCount = top.share > 0.55 ? 4 : 3;
-  const secondCount = top.share > 0.55 ? 2 : 3;
+  // ③ Freshener: trending to ensure the feed doesn't go stale
+  queries.push(`new music video ${new Date().getFullYear()}`);
 
-  const secondTerms = secondSlot.q.split(" ");
-  const blended = [
-    ...topTerms.slice(0, topCount),
-    ...secondTerms.slice(0, secondCount),
-    "official music video",
-  ].join(" ");
-
-  // Author boost: prepend top author if they haven't already appeared in the query
-  if (topAuthor && !blended.toLowerCase().includes(topAuthor)) {
-    return `${topAuthor} ${blended}`;
-  }
-
-  return blended;
+  return queries;
 }
 
 /**
