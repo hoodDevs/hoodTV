@@ -416,6 +416,14 @@ export default function WatchPage() {
                 src={streamUrl}
                 sourceType={activeStreamSource?.source_type}
                 tracks={streamCaptions}
+                onError={() => {
+                  if (activeSource < sources.length - 1) {
+                    setActiveSource(prev => prev + 1);
+                  } else {
+                    setLoadState("error");
+                    setErrorMsg("All sources failed. Please try again later.");
+                  }
+                }}
               />
             </div>
           )}
