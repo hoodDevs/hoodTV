@@ -1,224 +1,216 @@
-import re
 import time
 import urllib.parse
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import Response, StreamingResponse
+from fastapi.responses import Response
 from curl_cffi import requests as cffi_requests
 
 router = APIRouter()
 
+# Chrome UA for impersonation
 UA = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
     "AppleWebKit/537.36 (KHTML, like Gecko) "
     "Chrome/131.0.0.0 Safari/537.36"
 )
 
-_REFERER_MAP = {
-    "vidplus.dev":                  ("https://player.videasy.net/", "https://player.videasy.net"),
-    "videasy.net":                  ("https://player.videasy.net/", "https://player.videasy.net"),
-    "megafiles.store":              ("https://player.videasy.net/", "https://player.videasy.net"),
-    "serversicuro.cc":              ("https://player.videasy.net/", "https://player.videasy.net"),
-    "uskevinpowell89.workers.dev":  ("https://player.videasy.net/", "https://player.videasy.net"),
-    "skyember44.online":            ("https://player.videasy.net/", "https://player.videasy.net"),
-    "skyember":                     ("https://player.videasy.net/", "https://player.videasy.net"),
-    "cloudrabbit99.online":         ("https://player.videasy.net/", "https://player.videasy.net"),
-    "cloudrabbit":                  ("https://player.videasy.net/", "https://player.videasy.net"),
-}
+# All known CDN hosts that serve Videasy content
+VIDEASY_DOMAINS = [
+    "vidplus.dev",
+    "videasy.net",
+    "megafiles.store",
+    "serversicuro.cc",
+    "uskevinpowell89.workers.dev",
+    "skyember44.online",
+    "skyember",
+    "cloudrabbit99.online",
+    "cloudrabbit",
+]
 
-def _get_headers(url: str) -> dict:
-    parsed = urllib.parse.urlparse(url)
-    host = parsed.netloc.lower()
-    for domain, (referer, origin) in _REFERER_MAP.items():
-        if domain in host:
-            return {
-                "User-Agent": UA,
-                "Referer": referer,
-                "Origin": origin,
-                "Accept": "*/*",
-                "Accept-Language": "en-US,en;q=0.9",
-            }
+VIDEASY_REFERER = "https://player.videasy.net/"
+VIDEASY_ORIGIN  = "https://player.videasy.net"
+DEFAULT_REFERER = "https://vidlink.pro/"
+DEFAULT_ORIGIN  = "https://vidlink.pro"
+
+
+def _headers_for(url: str) -> dict:
+    host = urllib.parse.urlparse(url).netloc.lower()
+    if any(d in host for d in VIDEASY_DOMAINS):
+        ref, ori = VIDEASY_REFERER, VIDEASY_ORIGIN
+    else:
+        ref, ori = DEFAULT_REFERER, DEFAULT_ORIGIN
     return {
         "User-Agent": UA,
-        "Referer": "https://vidlink.pro/",
-        "Origin": "https://vidlink.pro",
+        "Referer": ref,
+        "Origin": ori,
         "Accept": "*/*",
         "Accept-Language": "en-US,en;q=0.9",
     }
 
 
-def _fetch_with_retry(url: str, max_retries: int = 2, timeout: int = 25):
-    """Returns (response, final_url_after_redirects)."""
-    last_err = None
-    headers = _get_headers(url)
-    for attempt in range(max_retries + 1):
+def _fetch(url: str, retries: int = 2, timeout: int = 25):
+    """Fetch url with Chrome impersonation. Returns (response, final_url)."""
+    err = None
+    for attempt in range(retries + 1):
         try:
-            session = cffi_requests.Session(impersonate="chrome131")
-            resp = session.get(url, headers=headers, timeout=timeout, allow_redirects=True)
-            final_url = getattr(resp, "url", None) or url
-            if resp.status_code == 200:
-                return resp, final_url
-            if resp.status_code in (429, 503) and attempt < max_retries:
+            sess = cffi_requests.Session(impersonate="chrome131")
+            r = sess.get(url, headers=_headers_for(url), timeout=timeout, allow_redirects=True)
+            final = getattr(r, "url", None) or url
+            if r.status_code == 200:
+                return r, final
+            if r.status_code in (429, 503) and attempt < retries:
                 time.sleep(1.5 * (attempt + 1))
                 continue
-            return resp, final_url
+            return r, final
         except Exception as e:
-            last_err = e
-            if attempt < max_retries:
+            err = e
+            if attempt < retries:
                 time.sleep(1.0 * (attempt + 1))
-    if last_err:
-        raise last_err
-    raise RuntimeError("All retries failed")
+    raise err or RuntimeError("fetch failed")
 
 
-def _absolute_url(base: str, path: str) -> str:
-    return urllib.parse.urljoin(base, path)
+def _proxify(url: str) -> str:
+    """Return a proxy URL for an upstream URL."""
+    return "/api/proxy/hls?url=" + urllib.parse.quote(url, safe="")
 
 
-def _is_media_playlist(content: str) -> bool:
-    """True when the m3u8 is a media playlist (has #EXTINF segments)."""
-    return "#EXTINF" in content
-
-
-def _is_master_playlist(content: str) -> bool:
-    """True when the m3u8 already has variant streams."""
-    return "#EXT-X-STREAM-INF" in content
-
-
-def _rewrite_m3u8(content: str, base_url: str, proxy_prefix: str) -> str:
-    parsed = urllib.parse.urlparse(base_url)
-    base_domain = f"{parsed.scheme}://{parsed.netloc}"
-
-    lines = content.splitlines()
+def _rewrite_playlist(text: str, base: str) -> str:
+    """
+    Rewrite every non-comment line in an m3u8 to go through the proxy.
+    Resolves relative URLs against `base` (the final URL after redirects).
+    """
+    scheme_host = urllib.parse.urlparse(base)
+    scheme_host = f"{scheme_host.scheme}://{scheme_host.netloc}"
     out = []
-    for line in lines:
-        stripped = line.strip()
-        if not stripped or stripped.startswith("#"):
+    for line in text.splitlines():
+        s = line.strip()
+        if not s or s.startswith("#"):
             out.append(line)
             continue
-        if stripped.startswith("http://") or stripped.startswith("https://"):
-            abs_url = stripped
-        elif stripped.startswith("/"):
-            abs_url = base_domain + stripped
+        # Resolve to absolute
+        if s.startswith("http://") or s.startswith("https://"):
+            abs_url = s
+        elif s.startswith("//"):
+            abs_url = "https:" + s
+        elif s.startswith("/"):
+            abs_url = scheme_host + s
         else:
-            abs_url = _absolute_url(base_url, stripped)
-        out.append(f"{proxy_prefix}{urllib.parse.quote(abs_url, safe='')}")
+            abs_url = urllib.parse.urljoin(base, s)
+        out.append(_proxify(abs_url))
     return "\n".join(out)
 
 
-def _guess_bandwidth(content: str) -> int:
-    """Rough bandwidth guess from resolution hint in the URL or default 2 Mbps."""
-    if "1080" in content or "MTA4MA" in content:
-        return 4_000_000
-    if "720" in content or "NzIw" in content:
-        return 2_000_000
-    if "360" in content or "MzYw" in content:
-        return 800_000
-    return 2_000_000
+def _wrap_as_master(media_proxy_url: str, upstream_url: str) -> str:
+    """
+    Wrap a single media playlist URL in a minimal synthetic master playlist.
+    This gives HLS.js a consistent entry point with STREAM-INF metadata.
+    """
+    u = upstream_url.upper()
+    if "1080" in u or "MTA4MA" in u:
+        bw, res = 4_000_000, "1920x1080"
+    elif "720" in u or "NzIw" in u:
+        bw, res = 2_000_000, "1280x720"
+    elif "480" in u or "NDgw" in u:
+        bw, res = 1_200_000, "854x480"
+    else:
+        bw, res = 2_000_000, "1280x720"
 
-
-def _guess_resolution(content: str) -> str:
-    if "1080" in content or "MTA4MA" in content:
-        return "1920x1080"
-    if "720" in content or "NzIw" in content:
-        return "1280x720"
-    if "360" in content or "MzYw" in content:
-        return "640x360"
-    return "1280x720"
-
-
-def _build_master_playlist(media_playlist_proxy_url: str, upstream_url: str) -> str:
-    """Wrap a media playlist URL in a synthetic master playlist.
-    No CODECS attribute — let the player auto-detect from segments."""
-    bw = _guess_bandwidth(upstream_url)
-    res = _guess_resolution(upstream_url)
     return (
         "#EXTM3U\n"
         "#EXT-X-VERSION:3\n"
         f"#EXT-X-STREAM-INF:BANDWIDTH={bw},RESOLUTION={res}\n"
-        f"{media_playlist_proxy_url}\n"
+        f"{media_proxy_url}\n"
     )
 
 
-@router.api_route("/proxy/hls", methods=["GET", "HEAD"])
+PLAYLIST_HEADERS = {
+    "Access-Control-Allow-Origin": "*",
+    "Cache-Control": "no-cache, no-store",
+    "Content-Type": "application/vnd.apple.mpegurl",
+}
+
+SEGMENT_HEADERS = {
+    "Access-Control-Allow-Origin": "*",
+    "Cache-Control": "max-age=3600",
+    "Content-Type": "video/mp2t",
+}
+
+
+@router.api_route("/proxy/hls", methods=["GET", "HEAD", "OPTIONS"])
 async def proxy_hls(request: Request, url: str, as_media: int = 0):
     """
-    Proxy an HLS m3u8 or video segment.
-    - Media playlists (with #EXTINF) are served via ?as_media=1 and wrapped in a
-      synthetic master playlist at the root URL so that Shaka Player receives
-      CODECS information and can activate its MPEG-TS transmuxer.
+    Single-endpoint HLS proxy.
+
+    GET /api/proxy/hls?url=<upstream_url>
+      → if it's an m3u8: returns a synthetic master playlist wrapping the media playlist
+      → if it's a segment: returns the raw bytes as video/mp2t
+
+    GET /api/proxy/hls?url=<upstream_url>&as_media=1
+      → returns the rewritten media playlist directly (segments proxied)
     """
-    if not url.startswith("http"):
-        raise HTTPException(status_code=400, detail="Invalid URL")
-    is_head = request.method == "HEAD"
-
-    try:
-        resp, final_url = _fetch_with_retry(url)
-    except Exception as e:
-        raise HTTPException(status_code=502, detail=f"Upstream fetch failed: {e}")
-
-    if resp.status_code != 200:
-        raise HTTPException(status_code=resp.status_code, detail="Upstream error")
-
-    content_type = resp.headers.get("content-type", "")
-    is_m3u8 = "mpegurl" in content_type.lower() or url.split("?")[0].endswith(".m3u8")
-
-    if is_m3u8:
-        if is_head:
-            return Response(
-                content=b"",
-                media_type="application/vnd.apple.mpegurl",
-                headers={"Access-Control-Allow-Origin": "*", "Cache-Control": "no-cache"},
-            )
-
-        body_text = resp.text
-        proxy_prefix = "/api/proxy/hls?url="
-        # Use the final URL after any CDN redirects as the base for resolving
-        # relative paths — ensures segment URLs point to the correct origin server
-        base_url = final_url
-
-        # If this is a master playlist already (has variant streams), just rewrite it
-        if _is_master_playlist(body_text):
-            rewritten = _rewrite_m3u8(body_text, base_url, proxy_prefix)
-            return Response(
-                content=rewritten,
-                media_type="application/vnd.apple.mpegurl",
-                headers={"Access-Control-Allow-Origin": "*", "Cache-Control": "no-cache"},
-            )
-
-        # Media playlist: either serve as master wrapper or as the raw rewritten playlist
-        if as_media:
-            # Return the rewritten media playlist directly (segment URLs proxied)
-            rewritten = _rewrite_m3u8(body_text, base_url, proxy_prefix)
-            return Response(
-                content=rewritten,
-                media_type="application/vnd.apple.mpegurl",
-                headers={"Access-Control-Allow-Origin": "*", "Cache-Control": "no-cache"},
-            )
-        else:
-            # Wrap the media playlist in a synthetic master playlist with codec info
-            # The media playlist is referenced via &as_media=1 so it is served raw
-            encoded_url = urllib.parse.quote(url, safe="")
-            media_playlist_proxy_url = f"/api/proxy/hls?url={encoded_url}&as_media=1"
-            master = _build_master_playlist(media_playlist_proxy_url, url)
-            return Response(
-                content=master,
-                media_type="application/vnd.apple.mpegurl",
-                headers={"Access-Control-Allow-Origin": "*", "Cache-Control": "no-cache"},
-            )
-    else:
-        # Segments may be disguised with fake extensions (.jpg, .html, .css, etc.)
-        # Always serve as MPEG-TS so the player can decode them correctly
-        raw_path = url.split("?")[0].lower()
-        non_ts_exts = (".m3u8", ".vtt", ".srt", ".ass", ".key")
-        if any(raw_path.endswith(ext) for ext in non_ts_exts):
-            media_type = content_type if content_type else "application/octet-stream"
-        else:
-            media_type = "video/mp2t"
+    if request.method == "OPTIONS":
         return Response(
-            content=b"" if is_head else resp.content,
-            media_type=media_type,
             headers={
                 "Access-Control-Allow-Origin": "*",
-                "Cache-Control": "max-age=3600",
-            },
+                "Access-Control-Allow-Methods": "GET, HEAD, OPTIONS",
+                "Access-Control-Allow-Headers": "*",
+            }
         )
+
+    if not url.startswith("http"):
+        raise HTTPException(400, "url must start with http")
+
+    try:
+        resp, final_url = _fetch(url)
+    except Exception as exc:
+        raise HTTPException(502, f"upstream error: {exc}")
+
+    if resp.status_code != 200:
+        raise HTTPException(resp.status_code, "upstream returned non-200")
+
+    ct = resp.headers.get("content-type", "").lower()
+    is_m3u8 = "mpegurl" in ct or url.split("?")[0].lower().endswith(".m3u8")
+
+    # ── PLAYLIST ────────────────────────────────────────────────────────────
+    if is_m3u8:
+        body = resp.text
+
+        # Already a master playlist (has variant stream entries) → just rewrite
+        if "#EXT-X-STREAM-INF" in body:
+            return Response(
+                content=_rewrite_playlist(body, final_url),
+                headers=PLAYLIST_HEADERS,
+            )
+
+        # Media playlist requested via &as_media=1 → rewrite segments and return
+        if as_media:
+            return Response(
+                content=_rewrite_playlist(body, final_url),
+                headers=PLAYLIST_HEADERS,
+            )
+
+        # Media playlist accessed directly (first call) →
+        # return a synthetic master that points back here with as_media=1
+        media_proxy = _proxify(url) + "&as_media=1"
+        return Response(
+            content=_wrap_as_master(media_proxy, url),
+            headers=PLAYLIST_HEADERS,
+        )
+
+    # ── SUBTITLES ───────────────────────────────────────────────────────────
+    raw_path = url.split("?")[0].lower()
+
+    if raw_path.endswith(".vtt"):
+        h = {"Access-Control-Allow-Origin": "*", "Cache-Control": "max-age=3600", "Content-Type": "text/vtt; charset=utf-8"}
+        return Response(content=b"" if request.method == "HEAD" else resp.content, headers=h)
+
+    if raw_path.endswith(".srt") or raw_path.endswith(".ass"):
+        h = {"Access-Control-Allow-Origin": "*", "Cache-Control": "max-age=3600", "Content-Type": "text/plain; charset=utf-8"}
+        return Response(content=b"" if request.method == "HEAD" else resp.content, headers=h)
+
+    # ── SEGMENT ─────────────────────────────────────────────────────────────
+    # CDN disguises TS segments with fake extensions (.jpg .html .js .css).
+    # Always serve them as video/mp2t so the player can decode them.
+    if request.method == "HEAD":
+        return Response(headers=SEGMENT_HEADERS)
+
+    return Response(content=resp.content, headers=SEGMENT_HEADERS)
