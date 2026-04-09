@@ -21,6 +21,8 @@ _REFERER_MAP = {
     "uskevinpowell89.workers.dev":  ("https://player.videasy.net/", "https://player.videasy.net"),
     "skyember44.online":            ("https://player.videasy.net/", "https://player.videasy.net"),
     "skyember":                     ("https://player.videasy.net/", "https://player.videasy.net"),
+    "cloudrabbit99.online":         ("https://player.videasy.net/", "https://player.videasy.net"),
+    "cloudrabbit":                  ("https://player.videasy.net/", "https://player.videasy.net"),
 }
 
 def _get_headers(url: str) -> dict:
