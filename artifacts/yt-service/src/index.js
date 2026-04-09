@@ -177,6 +177,74 @@ app.get("/api/yt/music/stream", async (req, res) => {
   }
 });
 
+// Resolve direct video URL via yt-dlp (muxed mp4 — formats 22=720p, 18=360p)
+function getVideoUrl(videoId) {
+  return new Promise((resolve, reject) => {
+    execFile(
+      "yt-dlp",
+      [
+        "--no-warnings",
+        "-f", "22/18/best[ext=mp4]/best",
+        "--get-url",
+        `https://www.youtube.com/watch?v=${videoId}`,
+      ],
+      { timeout: 25000 },
+      (err, stdout, stderr) => {
+        if (err) return reject(new Error(stderr || err.message));
+        const url = stdout.trim().split("\n")[0];
+        if (!url) return reject(new Error("No URL returned"));
+        resolve(url);
+      }
+    );
+  });
+}
+
+// Stream video for a YouTube videoId (proxied with range support)
+// GET /api/yt/video/stream?videoId=xxx
+app.get("/api/yt/video/stream", async (req, res) => {
+  try {
+    const { videoId } = req.query;
+    if (!videoId) return res.status(400).json({ error: "videoId required" });
+
+    const videoUrl = await getVideoUrl(videoId);
+
+    const rangeHeader = req.headers["range"];
+    const fetchHeaders = { "User-Agent": "Mozilla/5.0" };
+    if (rangeHeader) fetchHeaders["Range"] = rangeHeader;
+
+    const upstream = await fetch(videoUrl, { headers: fetchHeaders });
+
+    if (!upstream.ok && upstream.status !== 206) {
+      return res.status(502).json({ error: `Upstream ${upstream.status}` });
+    }
+
+    res.setHeader("Content-Type", upstream.headers.get("content-type") ?? "video/mp4");
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Accept-Ranges", "bytes");
+
+    const cl = upstream.headers.get("content-length");
+    const cr = upstream.headers.get("content-range");
+    if (cl) res.setHeader("Content-Length", cl);
+    if (cr) res.setHeader("Content-Range", cr);
+
+    res.status(rangeHeader ? 206 : 200);
+
+    const reader = upstream.body.getReader();
+    const pump = async () => {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done || res.writableEnded) break;
+        res.write(value);
+      }
+      if (!res.writableEnded) res.end();
+    };
+    pump().catch(() => { if (!res.writableEnded) res.end(); });
+  } catch (err) {
+    console.error("/api/yt/video/stream error:", err.message);
+    if (!res.headersSent) res.status(500).json({ error: err.message });
+  }
+});
+
 // ─── Video endpoints ───────────────────────────────────────────────────────────
 
 // Browse / search music videos

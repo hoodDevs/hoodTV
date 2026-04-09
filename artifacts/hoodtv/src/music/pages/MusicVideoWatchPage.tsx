@@ -2,6 +2,7 @@ import { useParams, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft, Eye, Clock, ExternalLink } from "lucide-react";
 import { motion } from "framer-motion";
+import { MusicVideoPlayer } from "../components/MusicVideoPlayer";
 
 interface VideoInfo {
   id: string;
@@ -159,18 +160,14 @@ export function MusicVideoWatchPage() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5, type: "spring", stiffness: 200 }}
             style={{
-              position: "relative", paddingTop: "56.25%", background: "#000",
-              borderRadius: 16, overflow: "hidden", marginBottom: 32,
-              boxShadow: "0 24px 60px rgba(0,0,0,0.6)", border: "1px solid rgba(255,255,255,0.05)",
+              marginBottom: 32,
+              boxShadow: "0 24px 60px rgba(0,0,0,0.6)",
+              borderRadius: 16,
+              border: "1px solid rgba(255,255,255,0.05)",
+              overflow: "hidden",
             }}
           >
-            <iframe
-              src={`https://www.youtube.com/embed/${videoId}?autoplay=1&rel=0&modestbranding=1&color=white`}
-              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
-              allowFullScreen
-              style={{ position: "absolute", inset: 0, width: "100%", height: "100%", border: "none" }}
-              title={info?.title ?? "Music Video"}
-            />
+            <MusicVideoPlayer videoId={videoId!} title={info?.title} />
           </motion.div>
 
           {/* Video meta */}
