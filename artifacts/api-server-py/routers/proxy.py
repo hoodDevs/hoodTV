@@ -1,20 +1,22 @@
-import time
+"""
+HLS proxy router.
+
+All HLS playlists and media segments are fetched through Scrapling's Fetcher
+(stealthy headers, Chrome fingerprint, anti-bot bypass) and served with
+correct CORS headers so the browser player can consume them without CORS errors.
+"""
 import urllib.parse
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import Response
-from curl_cffi import requests as cffi_requests
+from scrapling.fetchers import Fetcher
 
-router = APIRouter()
+router  = APIRouter()
 
-# Chrome UA for impersonation
-UA = (
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-    "AppleWebKit/537.36 (KHTML, like Gecko) "
-    "Chrome/131.0.0.0 Safari/537.36"
-)
+# One shared Fetcher instance — Scrapling handles session/connection pooling
+_fetcher = Fetcher()
 
-# All known CDN hosts that serve Videasy content
-VIDEASY_DOMAINS = [
+# Every CDN we've seen serving Videasy content uses the same referer/origin
+_VIDEASY_DOMAINS = [
     "vidplus.dev",
     "videasy.net",
     "megafiles.store",
@@ -26,67 +28,62 @@ VIDEASY_DOMAINS = [
     "cloudrabbit",
 ]
 
-VIDEASY_REFERER = "https://player.videasy.net/"
-VIDEASY_ORIGIN  = "https://player.videasy.net"
-DEFAULT_REFERER = "https://vidlink.pro/"
-DEFAULT_ORIGIN  = "https://vidlink.pro"
+_PLAYLIST_CT = "application/vnd.apple.mpegurl"
+_SEGMENT_CT  = "video/mp2t"
+_VTT_CT      = "text/vtt; charset=utf-8"
+
+_CORS = {"Access-Control-Allow-Origin": "*"}
 
 
-def _headers_for(url: str) -> dict:
+def _extra_headers(url: str) -> dict:
+    """
+    Return CDN-specific Referer/Origin headers.
+    Videasy CDNs require player.videasy.net as the referrer.
+    Everything else gets vidlink.pro as a safe fallback.
+    """
     host = urllib.parse.urlparse(url).netloc.lower()
-    if any(d in host for d in VIDEASY_DOMAINS):
-        ref, ori = VIDEASY_REFERER, VIDEASY_ORIGIN
-    else:
-        ref, ori = DEFAULT_REFERER, DEFAULT_ORIGIN
+    if any(d in host for d in _VIDEASY_DOMAINS):
+        return {
+            "Referer": "https://player.videasy.net/",
+            "Origin":  "https://player.videasy.net",
+        }
     return {
-        "User-Agent": UA,
-        "Referer": ref,
-        "Origin": ori,
-        "Accept": "*/*",
-        "Accept-Language": "en-US,en;q=0.9",
+        "Referer": "https://vidlink.pro/",
+        "Origin":  "https://vidlink.pro",
     }
 
 
-def _fetch(url: str, retries: int = 2, timeout: int = 25):
-    """Fetch url with Chrome impersonation. Returns (response, final_url)."""
-    err = None
-    for attempt in range(retries + 1):
-        try:
-            sess = cffi_requests.Session(impersonate="chrome131")
-            r = sess.get(url, headers=_headers_for(url), timeout=timeout, allow_redirects=True)
-            final = getattr(r, "url", None) or url
-            if r.status_code == 200:
-                return r, final
-            if r.status_code in (429, 503) and attempt < retries:
-                time.sleep(1.5 * (attempt + 1))
-                continue
-            return r, final
-        except Exception as e:
-            err = e
-            if attempt < retries:
-                time.sleep(1.0 * (attempt + 1))
-    raise err or RuntimeError("fetch failed")
+def _fetch(url: str):
+    """
+    Fetch a URL with Scrapling (stealthy Chrome fingerprint, auto-headers).
+    Returns the Scrapling Response object or raises an exception.
+    """
+    return _fetcher.get(
+        url,
+        stealthy_headers=True,
+        headers=_extra_headers(url),
+        follow_redirects=True,
+        timeout=25,
+    )
 
 
 def _proxify(url: str) -> str:
-    """Return a proxy URL for an upstream URL."""
     return "/api/proxy/hls?url=" + urllib.parse.quote(url, safe="")
 
 
-def _rewrite_playlist(text: str, base: str) -> str:
+def _rewrite_playlist(text: str, base_url: str) -> str:
     """
-    Rewrite every non-comment line in an m3u8 to go through the proxy.
-    Resolves relative URLs against `base` (the final URL after redirects).
+    Rewrite every non-comment line in an m3u8 so all URLs go through this proxy.
+    Resolves relative paths against base_url (the final URL after any redirects).
     """
-    scheme_host = urllib.parse.urlparse(base)
-    scheme_host = f"{scheme_host.scheme}://{scheme_host.netloc}"
+    parsed = urllib.parse.urlparse(base_url)
+    scheme_host = f"{parsed.scheme}://{parsed.netloc}"
     out = []
     for line in text.splitlines():
         s = line.strip()
         if not s or s.startswith("#"):
             out.append(line)
             continue
-        # Resolve to absolute
         if s.startswith("http://") or s.startswith("https://"):
             abs_url = s
         elif s.startswith("//"):
@@ -94,15 +91,15 @@ def _rewrite_playlist(text: str, base: str) -> str:
         elif s.startswith("/"):
             abs_url = scheme_host + s
         else:
-            abs_url = urllib.parse.urljoin(base, s)
+            abs_url = urllib.parse.urljoin(base_url, s)
         out.append(_proxify(abs_url))
     return "\n".join(out)
 
 
-def _wrap_as_master(media_proxy_url: str, upstream_url: str) -> str:
+def _wrap_media_as_master(media_proxy_url: str, upstream_url: str) -> str:
     """
-    Wrap a single media playlist URL in a minimal synthetic master playlist.
-    This gives HLS.js a consistent entry point with STREAM-INF metadata.
+    Wrap a single media-playlist URL in a synthetic master playlist.
+    HLS.js works most reliably when given a master playlist first.
     """
     u = upstream_url.upper()
     if "1080" in u or "MTA4MA" in u:
@@ -122,95 +119,89 @@ def _wrap_as_master(media_proxy_url: str, upstream_url: str) -> str:
     )
 
 
-PLAYLIST_HEADERS = {
-    "Access-Control-Allow-Origin": "*",
-    "Cache-Control": "no-cache, no-store",
-    "Content-Type": "application/vnd.apple.mpegurl",
-}
-
-SEGMENT_HEADERS = {
-    "Access-Control-Allow-Origin": "*",
-    "Cache-Control": "max-age=3600",
-    "Content-Type": "video/mp2t",
-}
-
-
+# ── Main endpoint ─────────────────────────────────────────────────────────────
 @router.api_route("/proxy/hls", methods=["GET", "HEAD", "OPTIONS"])
-async def proxy_hls(request: Request, url: str, as_media: int = 0):
+async def proxy_hls(request: Request, url: str = "", as_media: int = 0):
     """
-    Single-endpoint HLS proxy.
-
-    GET /api/proxy/hls?url=<upstream_url>
-      → if it's an m3u8: returns a synthetic master playlist wrapping the media playlist
-      → if it's a segment: returns the raw bytes as video/mp2t
-
-    GET /api/proxy/hls?url=<upstream_url>&as_media=1
-      → returns the rewritten media playlist directly (segments proxied)
+    GET  /api/proxy/hls?url=<upstream>          → master playlist (or segment)
+    GET  /api/proxy/hls?url=<upstream>&as_media=1 → raw media playlist (segments proxied)
+    HEAD /api/proxy/hls?url=<upstream>          → headers only
+    OPTIONS                                      → CORS preflight
     """
     if request.method == "OPTIONS":
         return Response(
             headers={
-                "Access-Control-Allow-Origin": "*",
+                **_CORS,
                 "Access-Control-Allow-Methods": "GET, HEAD, OPTIONS",
                 "Access-Control-Allow-Headers": "*",
             }
         )
 
     if not url.startswith("http"):
-        raise HTTPException(400, "url must start with http")
+        raise HTTPException(400, "url param must start with http")
 
+    # Fetch via Scrapling — stealthy Chrome fingerprint, correct referer
     try:
-        resp, final_url = _fetch(url)
+        resp = _fetch(url)
     except Exception as exc:
-        raise HTTPException(502, f"upstream error: {exc}")
+        raise HTTPException(502, f"upstream fetch failed: {exc}")
 
-    if resp.status_code != 200:
-        raise HTTPException(resp.status_code, "upstream returned non-200")
+    if resp.status >= 400:
+        raise HTTPException(resp.status, "upstream returned error")
 
-    ct = resp.headers.get("content-type", "").lower()
-    is_m3u8 = "mpegurl" in ct or url.split("?")[0].lower().endswith(".m3u8")
+    # Determine resource type
+    ct       = (resp.headers.get("content-type") or "").lower()
+    raw_path = url.split("?")[0].lower()
+    is_m3u8  = "mpegurl" in ct or raw_path.endswith(".m3u8")
+    is_vtt   = raw_path.endswith(".vtt")
+    is_sub   = raw_path.endswith(".srt") or raw_path.endswith(".ass")
 
-    # ── PLAYLIST ────────────────────────────────────────────────────────────
+    # ── Playlist ──────────────────────────────────────────────────────────────
     if is_m3u8:
-        body = resp.text
+        if request.method == "HEAD":
+            return Response(headers={**_CORS, "Content-Type": _PLAYLIST_CT, "Cache-Control": "no-cache"})
 
-        # Already a master playlist (has variant stream entries) → just rewrite
+        body     = resp.text
+        base_url = str(resp.url) if resp.url else url  # post-redirect URL for correct relative resolution
+
+        # Real master playlist (multiple variants) → just rewrite variant URLs
         if "#EXT-X-STREAM-INF" in body:
             return Response(
-                content=_rewrite_playlist(body, final_url),
-                headers=PLAYLIST_HEADERS,
+                content=_rewrite_playlist(body, base_url),
+                headers={**_CORS, "Content-Type": _PLAYLIST_CT, "Cache-Control": "no-cache"},
             )
 
-        # Media playlist requested via &as_media=1 → rewrite segments and return
+        # Media playlist requested directly (&as_media=1) → rewrite segments
         if as_media:
             return Response(
-                content=_rewrite_playlist(body, final_url),
-                headers=PLAYLIST_HEADERS,
+                content=_rewrite_playlist(body, base_url),
+                headers={**_CORS, "Content-Type": _PLAYLIST_CT, "Cache-Control": "no-cache"},
             )
 
-        # Media playlist accessed directly (first call) →
-        # return a synthetic master that points back here with as_media=1
+        # Media playlist first call → wrap in synthetic master so HLS.js gets quality info
         media_proxy = _proxify(url) + "&as_media=1"
         return Response(
-            content=_wrap_as_master(media_proxy, url),
-            headers=PLAYLIST_HEADERS,
+            content=_wrap_media_as_master(media_proxy, url),
+            headers={**_CORS, "Content-Type": _PLAYLIST_CT, "Cache-Control": "no-cache"},
         )
 
-    # ── SUBTITLES ───────────────────────────────────────────────────────────
-    raw_path = url.split("?")[0].lower()
+    # ── Subtitle / caption files ───────────────────────────────────────────────
+    if is_vtt:
+        return Response(
+            content=b"" if request.method == "HEAD" else resp.body,
+            headers={**_CORS, "Content-Type": _VTT_CT, "Cache-Control": "max-age=3600"},
+        )
 
-    if raw_path.endswith(".vtt"):
-        h = {"Access-Control-Allow-Origin": "*", "Cache-Control": "max-age=3600", "Content-Type": "text/vtt; charset=utf-8"}
-        return Response(content=b"" if request.method == "HEAD" else resp.content, headers=h)
+    if is_sub:
+        return Response(
+            content=b"" if request.method == "HEAD" else resp.body,
+            headers={**_CORS, "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "max-age=3600"},
+        )
 
-    if raw_path.endswith(".srt") or raw_path.endswith(".ass"):
-        h = {"Access-Control-Allow-Origin": "*", "Cache-Control": "max-age=3600", "Content-Type": "text/plain; charset=utf-8"}
-        return Response(content=b"" if request.method == "HEAD" else resp.content, headers=h)
-
-    # ── SEGMENT ─────────────────────────────────────────────────────────────
-    # CDN disguises TS segments with fake extensions (.jpg .html .js .css).
-    # Always serve them as video/mp2t so the player can decode them.
-    if request.method == "HEAD":
-        return Response(headers=SEGMENT_HEADERS)
-
-    return Response(content=resp.content, headers=SEGMENT_HEADERS)
+    # ── Segment ───────────────────────────────────────────────────────────────
+    # CDNs disguise TS segments with fake extensions (.jpg .html .js .css).
+    # Always serve as video/mp2t — the player ignores the fake extension.
+    return Response(
+        content=b"" if request.method == "HEAD" else resp.body,
+        headers={**_CORS, "Content-Type": _SEGMENT_CT, "Cache-Control": "max-age=3600"},
+    )
