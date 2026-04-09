@@ -2,7 +2,7 @@
 
 ## Overview
 
-pnpm workspace monorepo (TypeScript frontend) + Python FastAPI backend. hoodTV is a Netflix-style streaming platform. The backend uses curl_cffi for Cloudflare bypass and a Node.js WASM runner for stream decryption.
+pnpm workspace monorepo (TypeScript frontend) + **multi-language polyglot backend** (Python + Go + Rust + Scala). hoodTV is a Netflix-style streaming platform. The backend is a four-service fortress: stream extraction (Python), HLS proxy (Go), CDN circuit breaker (Rust), API gateway (Scala).
 
 ## Stack
 
@@ -13,14 +13,15 @@ pnpm workspace monorepo (TypeScript frontend) + Python FastAPI backend. hoodTV i
 - **Frontend**: React + Vite (hoodTV)
 - **Routing**: Wouter
 - **Python version**: 3.12 (uv managed)
-- **Backend framework**: FastAPI + Uvicorn
-- **HTTP**: curl_cffi (Chrome fingerprinting for Cloudflare bypass)
+- **Go version**: 1.24
+- **Rust version**: 1.88 (stable)
+- **Scala version**: 3.3.4 via scala-cli 1.8.0 (Java 19 GraalVM)
 
 ## Artifacts
 
 ### hoodTV (artifacts/hoodtv)
 Netflix-style streaming platform with dark purple theme.
-- **Route**: `/` (port: auto from PORT env)
+- **Route**: `/` (port: 20820)
 - **Theme**: Dark `#05050c` bg, `#7F77DD` accent, Bebas Neue headings, DM Sans body
 - **Pages**: HomePage, SearchPage, BrowsePage (Movies/TV), TitlePage, WatchPage, MyListPage, TrendingPage
 - **Layout**: Fixed 220px left sidebar Navbar, WatchPage is full-screen (no sidebar)
@@ -28,16 +29,53 @@ Netflix-style streaming platform with dark purple theme.
 - **Hooks**: useWatchlist (localStorage), useContinueWatching (localStorage)
 - **API layer**: `src/lib/api.ts` — TMDB for content discovery, `/api/stream/...` for streams
 
-### API Server (artifacts/api-server-py)
-Python FastAPI backend.
-- **Port**: 8080
-- **Source code**: `artifacts/api-server-py/` (main.py + routers/)
+## Multi-Language Fortress Backend
+
+### Request Flow
+
+```
+Browser
+  │
+  ├── /api/proxy/hls → Vite proxy → Go (8090) — HLS segments/playlists
+  │
+  └── /api/* → Vite proxy → Scala (8000) → Python (8080) — stream API
+                               └── /api/health → aggregates Python + Rust + Go
+                               └── /api/health/cdn → Rust (9000) — CDN health
+```
+
+### Python API Server (artifacts/api-server-py, port 8080)
+FastAPI + Uvicorn. Stream source extraction only.
 - **Routers**:
   - `routers/videasy.py` — Videasy stream source via WASM + CryptoJS decrypt; async CDN reachability validation
-  - `routers/proxy.py` — HLS proxy with per-domain referer headers, segment rewriting
-  - `routers/health.py` — health check
+  - `routers/proxy.py` — Fallback HLS proxy (now superseded by Go proxy)
+  - `routers/health.py` — health check endpoint
+- Uses `curl_cffi` with Chrome fingerprinting for Cloudflare bypass
 
-## Streaming Architecture (HLS.js + Direct m3u8)
+### Go HLS Proxy (artifacts/go-proxy, port 8090)
+High-performance reverse proxy for all HLS traffic — every m3u8 playlist and TS segment.
+- `main.go` — single-file Go server using only stdlib (`net/http`)
+- Connection pool: 300 max idle, 100 per host, 90s timeout
+- Domain-aware referer headers (same Videasy domain map as Python)
+- m3u8 rewriting: master playlist passthrough, media playlist master-wrapping, segment URL proxying
+- CORS headers on all responses
+- Workflow: `Go Proxy` — `go run artifacts/go-proxy/main.go`
+
+### Rust CDN Circuit Breaker (artifacts/rust-health, port 9000)
+Actix-web service tracking CDN health with a three-state circuit breaker (Closed/Half-Open/Open).
+- `src/main.rs` — Tokio async runtime, `reqwest` for upstream checks
+- Circuit opens after 3 failures, half-opens after 30s cooldown
+- Endpoints: `GET /health`, `GET /health/cdn?url=...`, `GET /health/status`
+- Workflow: `Rust CDN Health` — `cargo run --manifest-path artifacts/rust-health/Cargo.toml`
+
+### Scala API Gateway (artifacts/scala-gateway, port 8000)
+JDK-native HTTP gateway (zero external dependencies, compiles in seconds).
+- `Gateway.scala` — `com.sun.net.httpserver.HttpServer` with `CachedThreadPool`
+- Aggregated health at `/api/health` — pings Python + Rust + Go in parallel
+- Delegates `/api/health/*` to Rust, all other `/api/*` to Python
+- CORS headers + `X-Gateway: scala-gateway/1.0` on all responses
+- Workflow: `Scala Gateway` — `scala-cli run artifacts/scala-gateway/Gateway.scala`
+
+## Streaming Architecture (Video.js + Direct m3u8)
 
 ### Videasy Source (`/api/stream/movie/{id}/videasy`, `/api/stream/tv/{id}/{s}/{e}/videasy`)
 - **Providers tried in parallel**: `myflixerzupcloud`, `visioncine`, `meine`, `hdmovie2`, `overflix`
@@ -51,17 +89,19 @@ Python FastAPI backend.
 - **CDN validation**: async HEAD checks filter out unreachable CDNs; fallback includes all sources if all fail
 - Sources returned sorted: 1080p → 720p → 480p → 360p → Auto
 
-### HLS Proxy (`/api/proxy/hls?url=<encoded>`)
-- Proxies any m3u8 URL through curl_cffi with Chrome impersonation
+### Go HLS Proxy (`/api/proxy/hls?url=<encoded>&as_media=1`)
+- Proxies any m3u8/TS URL with correct Videasy referer headers
 - **Domain-aware referer map**: `fast.vidplus.dev`, `videasy.net`, `megafiles.store`, `serversicuro.cc`, `uskevinpowell89.workers.dev` → `player.videasy.net` referer
-- Rewrites relative segment paths → absolute proxied URLs
-- Media playlists wrapped in synthetic HLS master playlist (with BANDWIDTH/RESOLUTION)
-- Segments always served as `video/mp2t`
+- Rewrites relative segment paths → root-relative proxied URLs (`/api/proxy/hls?url=...`)
+- Media playlists wrapped in synthetic HLS master playlist (BANDWIDTH/RESOLUTION hint)
+- TS segments served as `video/mp2t`, cached 1 hour; m3u8 served no-cache
 
-### Frontend Stream Loading
-- `getStreamSources()` in `api.ts` calls `/api/stream/{type}/{id}/videasy`
-- WatchPage shows quality selector when multiple sources available (1080p/720p/360p)
-- VideoPlayer uses HLS.js with 3-retry recovery; auto-advances to next source on failure
+### Video Player (VideoPlayer.tsx)
+- Video.js v8 + built-in VHS (HTTP Streaming)
+- hoodTV purple control bar, progress bar, spinner
+- `enableWorker: false` for main-thread transmux compatibility
+- `application/x-mpegURL` source type
+- Black screen in Replit embedded preview is expected (headless Chrome has no H.264 decoder)
 
 ## API Data Sources
 
@@ -75,12 +115,12 @@ Python FastAPI backend.
 - Python packages managed via `uv` — virtual env at `.pythonlibs/`
 - Videasy WASM lives at `artifacts/api-server-py/videasy_wasm/module.wasm`
 - crypto-js installed in `artifacts/api-server-py/videasy_wasm/node_modules/`
-- CORS: `allow_origins=["*"]`, Vite proxies `/api` → `localhost:8080`
+- Vite proxies: `/api/proxy` → Go (8090), `/api` → Scala (8000) → Python (8080)
 
 ## WatchPage Architecture
 - URL: `/watch/:tmdbId?title=...&type=movie|tv&year=...&total_seasons=N[&season=N&episode=N]`
 - Calls `/api/stream/{type}/{id}/videasy` for HLS stream sources
-- Shows loading spinner → HLS.js player on success → quality source switcher
+- Shows loading spinner → Video.js player on success → quality source switcher
 - TV shows show episode navigation bar (prev/next episode)
 - Continue watching progress saved to localStorage on mount
 
@@ -88,6 +128,9 @@ Python FastAPI backend.
 
 - `pnpm --filter @workspace/hoodtv run dev` — run hoodTV frontend
 - `PORT=8080 uv run python artifacts/api-server-py/main.py` — run Python API server
+- `PORT=8090 go run artifacts/go-proxy/main.go` — run Go HLS proxy
+- `PORT=9000 cargo run --manifest-path artifacts/rust-health/Cargo.toml` — run Rust health
+- `PORT=8000 scala-cli run artifacts/scala-gateway/Gateway.scala` — run Scala gateway
 - `uv add <package>` — add Python package
 
 See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and package details.

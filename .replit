@@ -1,4 +1,4 @@
-modules = ["nodejs-24", "python-3.12"]
+modules = ["nodejs-24", "python-3.12", "go-1.22", "rust-stable", "java-graalvm22.3"]
 
 [deployment]
 router = "application"
@@ -24,6 +24,14 @@ args = "Start application"
 task = "workflow.run"
 args = "Backend API"
 
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "Scala Gateway"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "Go Proxy"
+
 [[workflows.workflow]]
 name = "Start application"
 author = "agent"
@@ -48,6 +56,39 @@ waitForPort = 8080
 [workflows.workflow.metadata]
 outputType = "console"
 
+[[workflows.workflow]]
+name = "Scala Gateway"
+author = "agent"
+
+[workflows.workflow.metadata]
+outputType = "console"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "export PATH=$PATH:/nix/var/nix/profiles/default/bin && PORT=8000 PYTHON_URL=http://localhost:8080 RUST_URL=http://localhost:9000 GO_URL=http://localhost:8090 /nix/store/xnndv02a17ylc8yzmcqzjmj2k54bmrk5-scala-cli-1.8.0/bin/scala-cli run artifacts/scala-gateway/Gateway.scala"
+
+[[workflows.workflow]]
+name = "Rust CDN Health"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "export PATH=$PATH:/nix/var/nix/profiles/default/bin && PORT=9000 cargo run --manifest-path artifacts/rust-health/Cargo.toml"
+
+[workflows.workflow.metadata]
+outputType = "console"
+
+[[workflows.workflow]]
+name = "Go Proxy"
+author = "agent"
+
+[workflows.workflow.metadata]
+outputType = "console"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "PATH=$PATH:/nix/var/nix/profiles/default/bin PORT=8090 go run artifacts/go-proxy/main.go"
+
 [agent]
 stack = "PNPM_WORKSPACE"
 expertMode = true
@@ -57,12 +98,24 @@ path = "scripts/post-merge.sh"
 timeoutMs = 20000
 
 [[ports]]
+localPort = 8000
+externalPort = 8000
+
+[[ports]]
 localPort = 8080
 externalPort = 8080
 
 [[ports]]
 localPort = 8081
 externalPort = 80
+
+[[ports]]
+localPort = 8090
+externalPort = 3001
+
+[[ports]]
+localPort = 9000
+externalPort = 9000
 
 [[ports]]
 localPort = 20820

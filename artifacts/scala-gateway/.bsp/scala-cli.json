@@ -1,0 +1,20 @@
+{
+  "name": "scala-cli",
+  "argv": [
+    "/nix/store/xnndv02a17ylc8yzmcqzjmj2k54bmrk5-scala-cli-1.8.0/bin/scala-cli",
+    "bsp",
+    "--json-options",
+    "/home/runner/workspace/artifacts/scala-gateway/.scala-build/ide-options-v2.json",
+    "--json-launcher-options",
+    "/home/runner/workspace/artifacts/scala-gateway/.scala-build/ide-launcher-options.json",
+    "--envs-file",
+    "/home/runner/workspace/artifacts/scala-gateway/.scala-build/ide-envs.json",
+    "/home/runner/workspace/artifacts/scala-gateway/Gateway.scala"
+  ],
+  "version": "1.8.0",
+  "bspVersion": "2.1.1",
+  "languages": [
+    "scala",
+    "java"
+  ]
+}

@@ -72,8 +72,13 @@ export default defineConfig({
       deny: ["**/.*"],
     },
     proxy: {
+      "/api/proxy": {
+        target: "http://localhost:8090",
+        changeOrigin: true,
+        secure: false,
+      },
       "/api": {
-        target: "http://localhost:8080",
+        target: "http://localhost:8000",
         changeOrigin: true,
         secure: false,
       },
