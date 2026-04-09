@@ -1,7 +1,6 @@
 import { useParams, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft, Eye, Clock, ExternalLink } from "lucide-react";
-import { MINI_PLAYER_HEIGHT } from "../components/MiniPlayer";
 import { motion } from "framer-motion";
 
 interface VideoInfo {
@@ -100,7 +99,7 @@ export function MusicVideoWatchPage() {
         minHeight: "100vh",
         background: "#05050c",
         fontFamily: "'DM Sans', sans-serif",
-        paddingBottom: `${MINI_PLAYER_HEIGHT}px`,
+        paddingBottom: "40px",
       }}
     >
       {/* Top bar */}

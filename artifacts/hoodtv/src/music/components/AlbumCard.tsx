@@ -1,6 +1,5 @@
 import { useLocation } from "wouter";
 import { Play } from "lucide-react";
-import { useMusicPlayer } from "../context/MusicPlayerContext";
 import { artworkUrl, type Album } from "../lib/musicApi";
 
 interface Props {
@@ -10,7 +9,6 @@ interface Props {
 
 export function AlbumCard({ album, size = "md" }: Props) {
   const [, navigate] = useLocation();
-  const player = useMusicPlayer();
   const sz = size === "sm" ? 130 : 170;
   const art = artworkUrl(album.artworkUrl100, sz * 2);
 

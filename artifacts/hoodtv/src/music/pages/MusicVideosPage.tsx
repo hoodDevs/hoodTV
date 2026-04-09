@@ -2,7 +2,6 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { Search, Play, ArrowLeft } from "lucide-react";
-import { MINI_PLAYER_HEIGHT } from "../components/MiniPlayer";
 import { motion, AnimatePresence } from "framer-motion";
 
 export interface YtVideo {
@@ -166,7 +165,7 @@ export function MusicVideosPage() {
         minHeight: "100vh",
         background: "#05050c",
         fontFamily: "'DM Sans', sans-serif",
-        paddingBottom: `${MINI_PLAYER_HEIGHT + 40}px`,
+        paddingBottom: "40px",
       }}
     >
       {/* Top bar */}

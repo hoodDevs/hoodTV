@@ -1,6 +1,7 @@
 import express from "express";
 import cors from "cors";
 import { Innertube } from "youtubei.js";
+import { execFile } from "child_process";
 
 const app = express();
 app.use(cors());
@@ -106,6 +107,28 @@ app.get("/api/yt/music/search", async (req, res) => {
   }
 });
 
+// Resolve direct audio URL via yt-dlp
+function getAudioUrl(videoId) {
+  return new Promise((resolve, reject) => {
+    execFile(
+      "yt-dlp",
+      [
+        "--no-warnings",
+        "-f", "bestaudio[ext=m4a]/bestaudio",
+        "--get-url",
+        `https://www.youtube.com/watch?v=${videoId}`,
+      ],
+      { timeout: 20000 },
+      (err, stdout, stderr) => {
+        if (err) return reject(new Error(stderr || err.message));
+        const url = stdout.trim().split("\n")[0];
+        if (!url) return reject(new Error("No URL returned"));
+        resolve(url);
+      }
+    );
+  });
+}
+
 // Stream audio for a YouTube videoId (proxied to avoid CORS)
 // GET /api/yt/music/stream?videoId=xxx
 app.get("/api/yt/music/stream", async (req, res) => {
@@ -113,18 +136,41 @@ app.get("/api/yt/music/stream", async (req, res) => {
     const { videoId } = req.query;
     if (!videoId) return res.status(400).json({ error: "videoId required" });
 
-    const innertube = await getYT();
-    const info = await innertube.getInfo(videoId);
+    const audioUrl = await getAudioUrl(videoId);
 
-    res.setHeader("Content-Type", "audio/mp4");
-    res.setHeader("Access-Control-Allow-Origin", "*");
-    res.setHeader("Transfer-Encoding", "chunked");
+    const rangeHeader = req.headers["range"];
+    const fetchHeaders = {
+      "User-Agent": "Mozilla/5.0",
+    };
+    if (rangeHeader) fetchHeaders["Range"] = rangeHeader;
 
-    const stream = await info.download({ type: "audio", quality: "best", format: "any" });
-    for await (const chunk of stream) {
-      if (!res.writableEnded) res.write(chunk);
+    const upstream = await fetch(audioUrl, { headers: fetchHeaders });
+
+    if (!upstream.ok && upstream.status !== 206) {
+      return res.status(502).json({ error: `Upstream ${upstream.status}` });
     }
-    if (!res.writableEnded) res.end();
+
+    res.setHeader("Content-Type", upstream.headers.get("content-type") ?? "audio/mp4");
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Accept-Ranges", "bytes");
+
+    const cl = upstream.headers.get("content-length");
+    const cr = upstream.headers.get("content-range");
+    if (cl) res.setHeader("Content-Length", cl);
+    if (cr) res.setHeader("Content-Range", cr);
+
+    res.status(rangeHeader ? 206 : 200);
+
+    const reader = upstream.body.getReader();
+    const pump = async () => {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done || res.writableEnded) break;
+        res.write(value);
+      }
+      if (!res.writableEnded) res.end();
+    };
+    pump().catch(() => { if (!res.writableEnded) res.end(); });
   } catch (err) {
     console.error("/api/yt/music/stream error:", err.message);
     if (!res.headersSent) res.status(500).json({ error: err.message });

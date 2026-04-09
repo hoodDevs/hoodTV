@@ -4,10 +4,8 @@ import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { searchTracks, GENRES, artworkUrl, type Track } from "../lib/musicApi";
 import type { YtVideo } from "./MusicVideosPage";
-import { useMusicPlayer } from "../context/MusicPlayerContext";
 import { TrackRow } from "../components/TrackRow";
 import { ArtistCard } from "../components/ArtistCard";
-import { MINI_PLAYER_HEIGHT } from "../components/MiniPlayer";
 import { motion } from "framer-motion";
 
 function useDebounce(value: string, ms = 400) {
@@ -32,9 +30,8 @@ const itemVariants = {
   show: { opacity: 1, y: 0, transition: { type: "spring", stiffness: 300, damping: 24 } }
 };
 
-function HeroTrack({ track, queue }: { track: Track; queue: Track[] }) {
-  const player = useMusicPlayer();
-  const isActive = player.currentTrack?.trackId === track.trackId;
+function HeroTrack({ track }: { track: Track; queue: Track[] }) {
+  const [, navigate] = useLocation();
   const art = artworkUrl(track.artworkUrl100, 600);
 
   return (
@@ -122,7 +119,7 @@ function HeroTrack({ track, queue }: { track: Track; queue: Track[] }) {
             transition={{ delay: 0.6 }}
             whileHover={{ scale: 1.05, boxShadow: "0 0 30px rgba(127,119,221,0.5)" }}
             whileTap={{ scale: 0.95 }}
-            onClick={() => player.play(track, queue, 0)}
+            onClick={() => navigate(`/music/videos?q=${encodeURIComponent(track.artistName + " " + track.trackName)}`)}
             style={{
               display: "inline-flex", alignItems: "center", gap: 12,
               padding: "16px 32px", borderRadius: 40,
@@ -132,7 +129,7 @@ function HeroTrack({ track, queue }: { track: Track; queue: Track[] }) {
             }}
           >
             <Play size={20} fill="#fff" strokeWidth={0} />
-            {isActive && player.isPlaying ? "Now Playing" : "Play Preview"}
+            Watch Video
           </motion.button>
         </div>
       </div>
@@ -245,7 +242,6 @@ function MusicVideosPreview() {
 export function MusicHomePage() {
   const [searchQuery, setSearchQuery] = useState("");
   const debouncedQuery = useDebounce(searchQuery);
-  const player = useMusicPlayer();
   const [, navigate] = useLocation();
 
   const { data: hotTracks = [] } = useQuery<Track[]>({
@@ -276,7 +272,7 @@ export function MusicHomePage() {
         background: "#05050c",
         backgroundImage: "radial-gradient(circle at 50% 0%, rgba(127,119,221,0.05) 0%, transparent 50%)",
         padding: "40px 48px",
-        paddingBottom: `${MINI_PLAYER_HEIGHT + 40}px`,
+        paddingBottom: "40px",
         fontFamily: "'DM Sans', sans-serif",
       }}
     >

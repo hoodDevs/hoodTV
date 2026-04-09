@@ -12,7 +12,6 @@ import MyListPage from "@/pages/MyListPage";
 import TrendingPage from "@/pages/TrendingPage";
 import { Navbar, SIDEBAR_WIDTH } from "@/components/Navbar";
 import { MusicPlayerProvider } from "@/music/context/MusicPlayerContext";
-import { MiniPlayer } from "@/music/components/MiniPlayer";
 import { MusicHomePage } from "@/music/pages/MusicHomePage";
 import { ArtistPage } from "@/music/pages/ArtistPage";
 import { AlbumPage } from "@/music/pages/AlbumPage";
@@ -34,7 +33,6 @@ function Layout({ children }: { children: React.ReactNode }) {
       <div style={{ flex: 1, marginLeft: `${SIDEBAR_WIDTH}px`, minWidth: 0 }}>
         {children}
       </div>
-      <MiniPlayer />
     </div>
   );
 }

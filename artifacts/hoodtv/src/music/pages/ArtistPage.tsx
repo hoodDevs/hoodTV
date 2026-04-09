@@ -1,10 +1,8 @@
 import { useParams, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, Play, Shuffle } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import { searchTracks, artworkUrl, type Track } from "../lib/musicApi";
-import { useMusicPlayer } from "../context/MusicPlayerContext";
 import { TrackRow } from "../components/TrackRow";
-import { MINI_PLAYER_HEIGHT } from "../components/MiniPlayer";
 import { motion } from "framer-motion";
 
 const containerVariants = {
@@ -21,7 +19,6 @@ export function ArtistPage() {
   const { id } = useParams<{ id: string }>();
   const artistName = decodeURIComponent(id ?? "");
   const [, navigate] = useLocation();
-  const player = useMusicPlayer();
 
   const { data: tracks = [], isLoading } = useQuery<Track[]>({
     queryKey: ["artist-tracks", artistName],
@@ -32,25 +29,13 @@ export function ArtistPage() {
 
   const art = tracks[0]?.artworkUrl100 ? artworkUrl(tracks[0].artworkUrl100, 600) : "";
 
-  const handlePlayAll = () => {
-    const playable = tracks.filter((t) => t.previewUrl);
-    if (playable.length) player.play(playable[0], playable, 0);
-  };
-
-  const handleShuffle = () => {
-    const playable = tracks.filter((t) => t.previewUrl);
-    if (!playable.length) return;
-    const idx = Math.floor(Math.random() * playable.length);
-    player.play(playable[idx], playable, idx);
-  };
-
   return (
     <div
       style={{
         minHeight: "100vh",
         background: "#05050c",
         fontFamily: "'DM Sans', sans-serif",
-        paddingBottom: `${MINI_PLAYER_HEIGHT + 40}px`,
+        paddingBottom: "40px",
       }}
     >
       {/* Cinematic Hero */}
@@ -118,7 +103,7 @@ export function ArtistPage() {
               >
                 {artistName}
               </motion.h1>
-              <motion.div 
+              <motion.div
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.4 }}
@@ -127,7 +112,7 @@ export function ArtistPage() {
                 <motion.button
                   whileHover={{ scale: 1.05, boxShadow: "0 0 20px rgba(127,119,221,0.4)" }}
                   whileTap={{ scale: 0.95 }}
-                  onClick={handlePlayAll}
+                  onClick={() => navigate(`/music/videos?q=${encodeURIComponent(artistName)}`)}
                   style={{
                     display: "flex", alignItems: "center", gap: 10,
                     background: "linear-gradient(135deg, #7F77DD, #9D97E8)", border: "none", cursor: "pointer",
@@ -135,22 +120,7 @@ export function ArtistPage() {
                     padding: "14px 32px", borderRadius: 30,
                   }}
                 >
-                  <Play size={18} fill="#fff" strokeWidth={0} />
-                  Play All
-                </motion.button>
-                <motion.button
-                  whileHover={{ scale: 1.05, backgroundColor: "rgba(127,119,221,0.2)" }}
-                  whileTap={{ scale: 0.95 }}
-                  onClick={handleShuffle}
-                  style={{
-                    display: "flex", alignItems: "center", gap: 10,
-                    background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)",
-                    cursor: "pointer", color: "#fff", fontSize: 14, fontWeight: 600, letterSpacing: "0.05em",
-                    padding: "14px 32px", borderRadius: 30, backdropFilter: "blur(12px)",
-                  }}
-                >
-                  <Shuffle size={18} />
-                  Shuffle
+                  Watch Videos
                 </motion.button>
               </motion.div>
             </div>

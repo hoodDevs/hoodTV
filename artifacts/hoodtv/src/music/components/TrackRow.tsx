@@ -1,5 +1,4 @@
-import { Play, Pause, MonitorPlay } from "lucide-react";
-import { useMusicPlayer } from "../context/MusicPlayerContext";
+import { MonitorPlay } from "lucide-react";
 import { artworkUrl, fmtDuration, type Track } from "../lib/musicApi";
 import { useLocation } from "wouter";
 import { motion } from "framer-motion";
@@ -12,26 +11,10 @@ interface Props {
   showAlbum?: boolean;
 }
 
-export function TrackRow({ track, index, queue, showArt = false, showAlbum = true }: Props) {
-  const player = useMusicPlayer();
+export function TrackRow({ track, index, showArt = false, showAlbum = true }: Props) {
   const [, navigate] = useLocation();
 
-  const isActive = player.currentTrack?.trackId === track.trackId;
-  const isPlaying = isActive && player.isPlaying;
-
-  const handlePlay = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (!track.previewUrl) return;
-    if (isActive) {
-      player.togglePlay();
-    } else {
-      const idx = queue.findIndex((t) => t.trackId === track.trackId);
-      player.play(track, queue, idx >= 0 ? idx : 0);
-    }
-  };
-
-  const handleWatchMV = (e: React.MouseEvent) => {
-    e.stopPropagation();
+  const handleClick = () => {
     const q = encodeURIComponent(`${track.artistName} ${track.trackName}`);
     navigate(`/music/videos?q=${q}`);
   };
@@ -43,9 +26,9 @@ export function TrackRow({ track, index, queue, showArt = false, showAlbum = tru
 
   return (
     <motion.div
-      whileHover={{ scale: track.previewUrl ? 1.01 : 1, backgroundColor: "rgba(255,255,255,0.05)" }}
-      whileTap={{ scale: track.previewUrl ? 0.99 : 1 }}
-      onClick={handlePlay}
+      whileHover={{ scale: 1.01, backgroundColor: "rgba(255,255,255,0.05)" }}
+      whileTap={{ scale: 0.99 }}
+      onClick={handleClick}
       style={{
         display: "grid",
         gridTemplateColumns: showArt
@@ -57,43 +40,21 @@ export function TrackRow({ track, index, queue, showArt = false, showAlbum = tru
         gap: "16px",
         padding: "8px 16px",
         borderRadius: 12,
-        cursor: track.previewUrl ? "pointer" : "default",
-        background: isActive ? "linear-gradient(90deg, rgba(127,119,221,0.15), rgba(127,119,221,0.05))" : "transparent",
-        border: isActive ? "1px solid rgba(127,119,221,0.2)" : "1px solid transparent",
+        cursor: "pointer",
+        background: "transparent",
+        border: "1px solid transparent",
         transition: "all 0.2s ease-out",
-        color: isActive ? "#c0bdf5" : "#aaa",
-        opacity: track.previewUrl ? 1 : 0.4,
         position: "relative",
-        overflow: "hidden"
+        overflow: "hidden",
       }}
       className="group"
     >
-      {/* Active Indicator Bar */}
-      {isActive && (
-        <motion.div 
-          layoutId="activeTrackIndicator"
-          style={{ position: "absolute", left: 0, top: 8, bottom: 8, width: 3, background: "#7F77DD", borderRadius: "0 4px 4px 0" }} 
-        />
-      )}
-
-      {/* Index / play icon */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 48 }}>
-        {isPlaying ? (
-          <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }}>
-            <Pause size={18} fill="#9D97E8" color="#9D97E8" strokeWidth={0} />
-          </motion.div>
-        ) : isActive ? (
-          <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }}>
-            <Play size={18} fill="#9D97E8" color="#9D97E8" strokeWidth={0} />
-          </motion.div>
-        ) : (
-          <span style={{ fontSize: 14, color: "#666", fontWeight: 500, fontFamily: "monospace" }}>
-            {index !== undefined ? String(index + 1).padStart(2, '0') : ""}
-          </span>
-        )}
+        <span style={{ fontSize: 14, color: "#666", fontWeight: 500, fontFamily: "monospace" }}>
+          {index !== undefined ? String(index + 1).padStart(2, "0") : ""}
+        </span>
       </div>
 
-      {/* Album art */}
       {showArt && (
         <div style={{ position: "relative", width: 56, height: 56, borderRadius: 8, overflow: "hidden", boxShadow: "0 4px 10px rgba(0,0,0,0.3)" }}>
           <img
@@ -105,18 +66,17 @@ export function TrackRow({ track, index, queue, showArt = false, showAlbum = tru
         </div>
       )}
 
-      {/* Track name + artist */}
       <div style={{ minWidth: 0 }}>
         <div
           style={{
             fontSize: 15,
-            fontWeight: isActive ? 600 : 500,
-            color: isActive ? "#fff" : "#e8e8e8",
+            fontWeight: 500,
+            color: "#e8e8e8",
             whiteSpace: "nowrap",
             overflow: "hidden",
             textOverflow: "ellipsis",
             letterSpacing: "0.01em",
-            marginBottom: 2
+            marginBottom: 2,
           }}
         >
           {track.trackName}
@@ -139,7 +99,6 @@ export function TrackRow({ track, index, queue, showArt = false, showAlbum = tru
         </button>
       </div>
 
-      {/* Album name */}
       {showAlbum && !showArt && (
         <span
           style={{
@@ -154,22 +113,20 @@ export function TrackRow({ track, index, queue, showArt = false, showAlbum = tru
         </span>
       )}
 
-      {/* Duration */}
       <div style={{ fontSize: 13, color: "#666", textAlign: "right", fontVariantNumeric: "tabular-nums" }}>
         {fmtDuration(track.trackTimeMillis)}
       </div>
 
-      {/* Watch MV */}
       <motion.button
         whileHover={{ scale: 1.1, backgroundColor: "rgba(127,119,221,0.15)" }}
         whileTap={{ scale: 0.9 }}
         title="Find music video"
-        onClick={handleWatchMV}
+        onClick={(e) => { e.stopPropagation(); handleClick(); }}
         style={{
           background: "transparent",
           border: "none",
           cursor: "pointer",
-          color: isActive ? "#7F77DD" : "#555",
+          color: "#555",
           width: 36,
           height: 36,
           borderRadius: "50%",

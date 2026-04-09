@@ -1,10 +1,8 @@
 import { useParams, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, Play } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import { searchTracks, type Track } from "../lib/musicApi";
-import { useMusicPlayer } from "../context/MusicPlayerContext";
 import { TrackRow } from "../components/TrackRow";
-import { MINI_PLAYER_HEIGHT } from "../components/MiniPlayer";
 import { motion } from "framer-motion";
 
 const containerVariants = {
@@ -20,7 +18,6 @@ const itemVariants = {
 export function GenrePage() {
   const { query } = useParams<{ query: string }>();
   const [location, navigate] = useLocation();
-  const player = useMusicPlayer();
 
   const params = new URLSearchParams(location.split("?")[1] ?? "");
   const label = params.get("label") ?? decodeURIComponent(query ?? "");
@@ -31,11 +28,6 @@ export function GenrePage() {
     staleTime: 10 * 60 * 1000,
   });
 
-  const handlePlayAll = () => {
-    const playable = tracks.filter((t) => t.previewUrl);
-    if (playable.length) player.play(playable[0], playable, 0);
-  };
-
   return (
     <div
       style={{
@@ -44,7 +36,7 @@ export function GenrePage() {
         backgroundImage: "radial-gradient(ellipse at top right, rgba(127,119,221,0.1) 0%, transparent 60%)",
         fontFamily: "'DM Sans', sans-serif",
         padding: "40px 48px",
-        paddingBottom: `${MINI_PLAYER_HEIGHT + 40}px`,
+        paddingBottom: "40px",
       }}
     >
       <motion.button
@@ -84,7 +76,7 @@ export function GenrePage() {
             animate={{ opacity: 1, scale: 1 }}
             whileHover={{ scale: 1.05, boxShadow: "0 0 20px rgba(127,119,221,0.4)" }}
             whileTap={{ scale: 0.95 }}
-            onClick={handlePlayAll}
+            onClick={() => navigate(`/music/videos?q=${encodeURIComponent(label)}`)}
             style={{
               display: "flex", alignItems: "center", gap: 10,
               background: "linear-gradient(135deg, #7F77DD, #9D97E8)", border: "none", cursor: "pointer",
@@ -92,8 +84,7 @@ export function GenrePage() {
               padding: "14px 32px", borderRadius: 30,
             }}
           >
-            <Play size={18} fill="#fff" strokeWidth={0} />
-            Play Channel
+            Watch Videos
           </motion.button>
         )}
       </div>
