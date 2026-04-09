@@ -1,0 +1,8 @@
+{
+  "name": "videasy-runner",
+  "version": "1.0.0",
+  "private": true,
+  "dependencies": {
+    "crypto-js": "^4.2.0"
+  }
+}
