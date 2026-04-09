@@ -49,6 +49,7 @@ export interface TitleDetails extends MediaItem {
   tagline?: string;
   tmdbRating?: number;
   voteCount?: number;
+  imdbId?: string;
 }
 
 async function tmdbFetch(path: string): Promise<any> {
@@ -228,11 +229,12 @@ export async function getTitleDetails(tmdbId: string, type?: "movie" | "tv"): Pr
       }
     }
 
-    const [details, credits, videos, similar] = await Promise.all([
+    const [details, credits, videos, similar, externalIds] = await Promise.all([
       tmdbFetch(`/${mediaType}/${tmdbId}`),
       tmdbFetch(`/${mediaType}/${tmdbId}/credits`),
       tmdbFetch(`/${mediaType}/${tmdbId}/videos`),
       tmdbFetch(`/${mediaType}/${tmdbId}/similar`),
+      tmdbFetch(`/${mediaType}/${tmdbId}/external_ids`).catch(() => ({})),
     ]);
 
     const trailerKey = videos.results?.find(
@@ -284,6 +286,7 @@ export async function getTitleDetails(tmdbId: string, type?: "movie" | "tv"): Pr
       tagline: details.tagline,
       tmdbRating: details.vote_average,
       voteCount: details.vote_count,
+      imdbId: externalIds?.imdb_id || undefined,
     };
   } catch (err) {
     console.error("getTitleDetails error:", err);
@@ -328,17 +331,37 @@ export async function getStreamSources(
     ? `/api/stream/movie/${tmdbId}/videasy${qStr}`
     : `/api/stream/tv/${tmdbId}/${s}/${e}/videasy${qStr}`;
 
-  const videasyRes = await fetch(videasyPath);
-  if (!videasyRes.ok) throw new Error("Stream unavailable — no sources returned");
+  const nontongoQs = new URLSearchParams();
+  if (meta?.imdbId) nontongoQs.set("imdb_id", meta.imdbId);
+  const nontongoQStr = nontongoQs.toString() ? `?${nontongoQs.toString()}` : "";
+  const nontongoPath = type === "movie"
+    ? `/api/stream/movie/${tmdbId}/nontongo${nontongoQStr}`
+    : `/api/stream/tv/${tmdbId}/${s}/${e}/nontongo`;
 
-  const data: StreamResponse = await videasyRes.json();
-  const videasySources: StreamSource[] = data.sources ?? [];
+  const [videasyRes, nontongoRes] = await Promise.allSettled([
+    fetch(videasyPath),
+    fetch(nontongoPath),
+  ]);
 
-  if (videasySources.length === 0) {
+  const videasySources: StreamSource[] = [];
+  if (videasyRes.status === "fulfilled" && videasyRes.value.ok) {
+    const data: StreamResponse = await videasyRes.value.json();
+    videasySources.push(...(data.sources ?? []));
+  }
+
+  const nontongoSources: StreamSource[] = [];
+  if (nontongoRes.status === "fulfilled" && nontongoRes.value.ok) {
+    const data: StreamResponse = await nontongoRes.value.json();
+    nontongoSources.push(...(data.sources ?? []));
+  }
+
+  const allSources = [...videasySources, ...nontongoSources];
+
+  if (allSources.length === 0) {
     throw new Error("Stream unavailable — no sources returned");
   }
 
-  return videasySources;
+  return allSources;
 }
 
 export async function getSeasonEpisodes(tmdbId: number, season: number): Promise<Episode[]> {

@@ -28,6 +28,11 @@ _VIDEASY_DOMAINS = [
     "cloudrabbit",
 ]
 
+_NONTONGO_PLAYER_DOMAINS = [
+    "player.nontongo.win",
+    "nontongo.playerp2p.online",
+]
+
 _PLAYLIST_CT = "application/vnd.apple.mpegurl"
 _SEGMENT_CT  = "video/mp2t"
 _VTT_CT      = "text/vtt; charset=utf-8"
@@ -39,6 +44,7 @@ def _extra_headers(url: str) -> dict:
     """
     Return CDN-specific Referer/Origin headers.
     Videasy CDNs require player.videasy.net as the referrer.
+    NontonGo player domains require player.nontongo.win as the referrer.
     Everything else gets vidlink.pro as a safe fallback.
     """
     host = urllib.parse.urlparse(url).netloc.lower()
@@ -46,6 +52,11 @@ def _extra_headers(url: str) -> dict:
         return {
             "Referer": "https://player.videasy.net/",
             "Origin":  "https://player.videasy.net",
+        }
+    if any(d in host for d in _NONTONGO_PLAYER_DOMAINS):
+        return {
+            "Referer": "https://player.nontongo.win/",
+            "Origin":  "https://player.nontongo.win",
         }
     return {
         "Referer": "https://vidlink.pro/",
@@ -161,7 +172,10 @@ async def proxy_hls(request: Request, url: str = "", as_media: int = 0):
         if request.method == "HEAD":
             return Response(headers={**_CORS, "Content-Type": _PLAYLIST_CT, "Cache-Control": "no-cache"})
 
-        body     = resp.text
+        # Use resp.body decoded as UTF-8 (Scrapling's .text can be empty for
+        # gzip-encoded responses when the Content-Encoding header is present)
+        raw_body = resp.body or b""
+        body     = raw_body.decode("utf-8", "replace") if raw_body else (resp.text or "")
         base_url = str(resp.url) if resp.url else url  # post-redirect URL for correct relative resolution
 
         # Real master playlist (multiple variants) → just rewrite variant URLs
