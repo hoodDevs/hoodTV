@@ -79,17 +79,6 @@ export function VideoPlayer({ src, poster, tracks = [], onReady, onError }: Prop
       });
       hlsRef.current = hls;
 
-      // Drop audio track if the browser can't handle the codec
-      // (e.g. AC-3 on Chrome Linux). Video-only beats no video.
-      hls.on(Hls.Events.BUFFER_CODECS, (_e, data: Record<string, { codec: string; container: string }>) => {
-        if (data.audio) {
-          const mime = `${data.audio.container}; codecs="${data.audio.codec}"`;
-          if (!MediaSource.isTypeSupported(mime)) {
-            delete data.audio;
-          }
-        }
-      });
-
       hls.on(Hls.Events.MANIFEST_PARSED, (_e, d) => {
         setLevels(d.levels.map((l) => ({ height: l.height, bitrate: l.bitrate })));
         setCurLevel(hls.currentLevel);

@@ -86,6 +86,10 @@ def _proxify(url: str) -> str:
 
 
 def _rewrite_playlist(text: str, base_url: str) -> str:
+    """
+    Rewrite all non-comment lines in an HLS playlist (master or media)
+    so every URL is routed through our proxy.
+    """
     parsed = urllib.parse.urlparse(base_url)
     scheme_host = f"{parsed.scheme}://{parsed.netloc}"
     out = []
@@ -106,27 +110,8 @@ def _rewrite_playlist(text: str, base_url: str) -> str:
     return "\n".join(out)
 
 
-def _wrap_media_as_master(media_proxy_url: str, upstream_url: str) -> str:
-    u = upstream_url.upper()
-    if "1080" in u or "MTA4MA" in u:
-        bw, res = 4_000_000, "1920x1080"
-    elif "720" in u or "NzIw" in u:
-        bw, res = 2_000_000, "1280x720"
-    elif "480" in u or "NDgw" in u:
-        bw, res = 1_200_000, "854x480"
-    else:
-        bw, res = 2_000_000, "1280x720"
-
-    return (
-        "#EXTM3U\n"
-        "#EXT-X-VERSION:3\n"
-        f"#EXT-X-STREAM-INF:BANDWIDTH={bw},RESOLUTION={res}\n"
-        f"{media_proxy_url}\n"
-    )
-
-
 @router.api_route("/proxy/hls", methods=["GET", "HEAD", "OPTIONS"])
-async def proxy_hls(request: Request, url: str = "", as_media: int = 0):
+async def proxy_hls(request: Request, url: str = ""):
     if request.method == "OPTIONS":
         return Response(
             headers={
@@ -154,21 +139,11 @@ async def proxy_hls(request: Request, url: str = "", as_media: int = 0):
         body     = resp.content.decode("utf-8", "replace")
         base_url = str(resp.url)
 
-        if "#EXT-X-STREAM-INF" in body:
-            return Response(
-                content=_rewrite_playlist(body, base_url),
-                headers={**_CORS, "Content-Type": _PLAYLIST_CT, "Cache-Control": "no-cache"},
-            )
-
-        if as_media:
-            return Response(
-                content=_rewrite_playlist(body, base_url),
-                headers={**_CORS, "Content-Type": _PLAYLIST_CT, "Cache-Control": "no-cache"},
-            )
-
-        media_proxy = _proxify(url) + "&as_media=1"
+        # Rewrite all URLs (works for both master and media playlists).
+        # Never wrap media playlists in a fake master — HLS.js handles them
+        # directly, and double-wrapping causes "corrupt file" errors.
         return Response(
-            content=_wrap_media_as_master(media_proxy, url),
+            content=_rewrite_playlist(body, base_url),
             headers={**_CORS, "Content-Type": _PLAYLIST_CT, "Cache-Control": "no-cache"},
         )
 
@@ -184,7 +159,14 @@ async def proxy_hls(request: Request, url: str = "", as_media: int = 0):
             headers={**_CORS, "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "max-age=3600"},
         )
 
+    # Media segment — guard against CDN returning an HTML error page with 200 OK,
+    # which would cause HLS.js to push non-MPEG-TS data into the SourceBuffer
+    # and trigger the browser's "file is corrupt" error.
+    content = resp.content
+    if content and content[:5].lstrip(b" \t\r\n").startswith(b"<"):
+        raise HTTPException(502, "upstream returned HTML instead of segment data")
+
     return Response(
-        content=b"" if request.method == "HEAD" else resp.content,
+        content=b"" if request.method == "HEAD" else content,
         headers={**_CORS, "Content-Type": _SEGMENT_CT, "Cache-Control": "max-age=3600"},
     )
