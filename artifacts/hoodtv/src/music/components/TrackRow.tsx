@@ -2,6 +2,7 @@ import { Play, Pause, MonitorPlay } from "lucide-react";
 import { useMusicPlayer } from "../context/MusicPlayerContext";
 import { artworkUrl, fmtDuration, type Track } from "../lib/musicApi";
 import { useLocation } from "wouter";
+import { motion } from "framer-motion";
 
 interface Props {
   track: Track;
@@ -41,57 +42,81 @@ export function TrackRow({ track, index, queue, showArt = false, showAlbum = tru
   };
 
   return (
-    <div
+    <motion.div
+      whileHover={{ scale: track.previewUrl ? 1.01 : 1, backgroundColor: "rgba(255,255,255,0.05)" }}
+      whileTap={{ scale: track.previewUrl ? 0.99 : 1 }}
       onClick={handlePlay}
       style={{
         display: "grid",
         gridTemplateColumns: showArt
-          ? "40px 46px 1fr auto 28px"
+          ? "48px 56px 1fr auto 40px"
           : showAlbum
-          ? "40px 1fr 1fr auto 28px"
-          : "40px 1fr auto 28px",
+          ? "48px 1fr 1fr auto 40px"
+          : "48px 1fr auto 40px",
         alignItems: "center",
-        gap: "12px",
-        padding: "6px 12px",
-        borderRadius: 8,
+        gap: "16px",
+        padding: "8px 16px",
+        borderRadius: 12,
         cursor: track.previewUrl ? "pointer" : "default",
-        background: isActive ? "rgba(127,119,221,0.08)" : "transparent",
-        transition: "background 0.15s",
+        background: isActive ? "linear-gradient(90deg, rgba(127,119,221,0.15), rgba(127,119,221,0.05))" : "transparent",
+        border: isActive ? "1px solid rgba(127,119,221,0.2)" : "1px solid transparent",
+        transition: "all 0.2s ease-out",
         color: isActive ? "#c0bdf5" : "#aaa",
         opacity: track.previewUrl ? 1 : 0.4,
+        position: "relative",
+        overflow: "hidden"
       }}
-      className="track-row"
+      className="group"
     >
+      {/* Active Indicator Bar */}
+      {isActive && (
+        <motion.div 
+          layoutId="activeTrackIndicator"
+          style={{ position: "absolute", left: 0, top: 8, bottom: 8, width: 3, background: "#7F77DD", borderRadius: "0 4px 4px 0" }} 
+        />
+      )}
+
       {/* Index / play icon */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 28 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 48 }}>
         {isPlaying ? (
-          <Pause size={14} fill="#9D97E8" color="#9D97E8" strokeWidth={0} />
+          <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }}>
+            <Pause size={18} fill="#9D97E8" color="#9D97E8" strokeWidth={0} />
+          </motion.div>
         ) : isActive ? (
-          <Play size={14} fill="#9D97E8" color="#9D97E8" strokeWidth={0} />
+          <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }}>
+            <Play size={18} fill="#9D97E8" color="#9D97E8" strokeWidth={0} />
+          </motion.div>
         ) : (
-          <span style={{ fontSize: 12, color: "#555" }}>{index !== undefined ? index + 1 : ""}</span>
+          <span style={{ fontSize: 14, color: "#666", fontWeight: 500, fontFamily: "monospace" }}>
+            {index !== undefined ? String(index + 1).padStart(2, '0') : ""}
+          </span>
         )}
       </div>
 
       {/* Album art */}
       {showArt && (
-        <img
-          src={artworkUrl(track.artworkUrl100, 46)}
-          alt={track.trackName}
-          style={{ width: 46, height: 46, borderRadius: 4, objectFit: "cover" }}
-        />
+        <div style={{ position: "relative", width: 56, height: 56, borderRadius: 8, overflow: "hidden", boxShadow: "0 4px 10px rgba(0,0,0,0.3)" }}>
+          <img
+            src={artworkUrl(track.artworkUrl100, 112)}
+            alt={track.trackName}
+            style={{ width: "100%", height: "100%", objectFit: "cover" }}
+            loading="lazy"
+          />
+        </div>
       )}
 
       {/* Track name + artist */}
       <div style={{ minWidth: 0 }}>
         <div
           style={{
-            fontSize: 13.5,
-            fontWeight: 500,
-            color: isActive ? "#c0bdf5" : "#e8e8e8",
+            fontSize: 15,
+            fontWeight: isActive ? 600 : 500,
+            color: isActive ? "#fff" : "#e8e8e8",
             whiteSpace: "nowrap",
             overflow: "hidden",
             textOverflow: "ellipsis",
+            letterSpacing: "0.01em",
+            marginBottom: 2
           }}
         >
           {track.trackName}
@@ -102,22 +127,24 @@ export function TrackRow({ track, index, queue, showArt = false, showAlbum = tru
             border: "none",
             padding: 0,
             cursor: "pointer",
-            fontSize: 12,
-            color: "#666",
+            fontSize: 13,
+            color: "#888",
             textAlign: "left",
+            transition: "color 0.2s",
           }}
+          className="hover:text-[#9D97E8]"
           onClick={goToArtist}
         >
           {track.artistName}
         </button>
       </div>
 
-      {/* Album name (plain text — YouTube has no real album IDs) */}
+      {/* Album name */}
       {showAlbum && !showArt && (
         <span
           style={{
-            fontSize: 12,
-            color: "#555",
+            fontSize: 13,
+            color: "#666",
             whiteSpace: "nowrap",
             overflow: "hidden",
             textOverflow: "ellipsis",
@@ -128,34 +155,33 @@ export function TrackRow({ track, index, queue, showArt = false, showAlbum = tru
       )}
 
       {/* Duration */}
-      <div style={{ fontSize: 12, color: "#555", textAlign: "right" }}>
+      <div style={{ fontSize: 13, color: "#666", textAlign: "right", fontVariantNumeric: "tabular-nums" }}>
         {fmtDuration(track.trackTimeMillis)}
       </div>
 
       {/* Watch MV */}
-      <button
+      <motion.button
+        whileHover={{ scale: 1.1, backgroundColor: "rgba(127,119,221,0.15)" }}
+        whileTap={{ scale: 0.9 }}
         title="Find music video"
         onClick={handleWatchMV}
-        className="mv-btn"
         style={{
-          background: "none",
+          background: "transparent",
           border: "none",
           cursor: "pointer",
-          color: "#333",
-          padding: 0,
+          color: isActive ? "#7F77DD" : "#555",
+          width: 36,
+          height: 36,
+          borderRadius: "50%",
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          transition: "color 0.15s",
+          transition: "all 0.2s",
         }}
+        className="opacity-0 group-hover:opacity-100 focus:opacity-100"
       >
-        <MonitorPlay size={14} />
-      </button>
-
-      <style>{`
-        .track-row:hover { background: rgba(255,255,255,0.04) !important; }
-        .track-row:hover .mv-btn { color: #7F77DD !important; }
-      `}</style>
-    </div>
+        <MonitorPlay size={16} />
+      </motion.button>
+    </motion.div>
   );
 }

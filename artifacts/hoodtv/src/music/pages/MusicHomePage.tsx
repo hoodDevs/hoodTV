@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState } from "react";
 import { Search, Play, ChevronRight, MonitorPlay } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
@@ -8,6 +8,7 @@ import { useMusicPlayer } from "../context/MusicPlayerContext";
 import { TrackRow } from "../components/TrackRow";
 import { ArtistCard } from "../components/ArtistCard";
 import { MINI_PLAYER_HEIGHT } from "../components/MiniPlayer";
+import { motion } from "framer-motion";
 
 function useDebounce(value: string, ms = 400) {
   const [debounced, setDebounced] = useState(value);
@@ -18,21 +19,38 @@ function useDebounce(value: string, ms = 400) {
   return debounced;
 }
 
+const containerVariants = {
+  hidden: { opacity: 0 },
+  show: {
+    opacity: 1,
+    transition: { staggerChildren: 0.05 }
+  }
+};
+
+const itemVariants = {
+  hidden: { opacity: 0, y: 20 },
+  show: { opacity: 1, y: 0, transition: { type: "spring", stiffness: 300, damping: 24 } }
+};
+
 function HeroTrack({ track, queue }: { track: Track; queue: Track[] }) {
   const player = useMusicPlayer();
   const isActive = player.currentTrack?.trackId === track.trackId;
-  const art = artworkUrl(track.artworkUrl100, 400);
+  const art = artworkUrl(track.artworkUrl100, 600);
 
   return (
-    <div
+    <motion.div
+      initial={{ opacity: 0, y: 30 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.6, ease: "easeOut" }}
       style={{
         position: "relative",
         width: "100%",
-        minHeight: 320,
-        borderRadius: 16,
+        minHeight: 400,
+        borderRadius: 24,
         overflow: "hidden",
-        marginBottom: 40,
-        background: "#0d0d1a",
+        marginBottom: 48,
+        background: "#0a0a14",
+        boxShadow: "0 20px 60px rgba(0,0,0,0.5)",
       }}
     >
       <div
@@ -42,50 +60,83 @@ function HeroTrack({ track, queue }: { track: Track; queue: Track[] }) {
           backgroundImage: `url(${art})`,
           backgroundSize: "cover",
           backgroundPosition: "center",
-          filter: "blur(60px) saturate(1.5)",
-          opacity: 0.35,
-          transform: "scale(1.1)",
+          filter: "blur(80px) saturate(2)",
+          opacity: 0.4,
+          transform: "scale(1.2)",
         }}
       />
+      <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to right, rgba(5,5,12,0.95) 0%, rgba(5,5,12,0.4) 50%, transparent 100%)" }} />
+      
       <div
         style={{
           position: "relative",
           display: "flex",
           alignItems: "center",
-          gap: 28,
-          padding: "36px 36px",
+          gap: 40,
+          padding: "48px",
+          height: "100%",
         }}
       >
-        <img
-          src={art}
-          alt={track.collectionName}
-          style={{ width: 160, height: 160, borderRadius: 12, objectFit: "cover", flexShrink: 0, boxShadow: "0 12px 40px rgba(0,0,0,0.5)" }}
-        />
-        <div>
-          <div style={{ fontSize: 11, fontWeight: 500, color: "#9D97E8", letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: 8 }}>
+        <motion.div 
+          initial={{ scale: 0.9, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          transition={{ delay: 0.2, duration: 0.5 }}
+          style={{ position: "relative", zIndex: 2 }}
+        >
+          <img
+            src={art}
+            alt={track.collectionName}
+            style={{ width: 240, height: 240, borderRadius: 16, objectFit: "cover", flexShrink: 0, boxShadow: "0 24px 60px rgba(0,0,0,0.6)" }}
+          />
+        </motion.div>
+        
+        <div style={{ zIndex: 2, flex: 1 }}>
+          <motion.div 
+            initial={{ opacity: 0, x: -20 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ delay: 0.3 }}
+            style={{ fontSize: 13, fontWeight: 700, color: "#9D97E8", letterSpacing: "0.15em", textTransform: "uppercase", marginBottom: 12 }}
+          >
             Featured Track
-          </div>
-          <div style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 42, color: "#fff", lineHeight: 1.05, marginBottom: 8 }}>
+          </motion.div>
+          <motion.div 
+            initial={{ opacity: 0, x: -20 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ delay: 0.4 }}
+            style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 64, color: "#fff", lineHeight: 1, marginBottom: 12, textShadow: "0 4px 12px rgba(0,0,0,0.5)" }}
+          >
             {track.trackName}
-          </div>
-          <div style={{ fontSize: 15, color: "#aaa", marginBottom: 20 }}>
-            {track.artistName} · {track.collectionName}
-          </div>
-          <button
+          </motion.div>
+          <motion.div 
+            initial={{ opacity: 0, x: -20 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ delay: 0.5 }}
+            style={{ fontSize: 18, color: "#e0e0e0", marginBottom: 32, opacity: 0.8 }}
+          >
+            {track.artistName} <span style={{ margin: "0 8px", color: "#666" }}>•</span> {track.collectionName}
+          </motion.div>
+          
+          <motion.button
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.6 }}
+            whileHover={{ scale: 1.05, boxShadow: "0 0 30px rgba(127,119,221,0.5)" }}
+            whileTap={{ scale: 0.95 }}
             onClick={() => player.play(track, queue, 0)}
             style={{
-              display: "flex", alignItems: "center", gap: 10,
-              padding: "12px 24px", borderRadius: 30,
-              background: "#7F77DD", border: "none", cursor: "pointer",
-              color: "#fff", fontSize: 14, fontWeight: 600, letterSpacing: "0.02em",
+              display: "inline-flex", alignItems: "center", gap: 12,
+              padding: "16px 32px", borderRadius: 40,
+              background: "linear-gradient(135deg, #7F77DD, #9D97E8)", border: "none", cursor: "pointer",
+              color: "#fff", fontSize: 15, fontWeight: 700, letterSpacing: "0.03em",
+              boxShadow: "0 8px 24px rgba(127,119,221,0.3)",
             }}
           >
-            <Play size={18} fill="#fff" strokeWidth={0} />
-            {isActive && player.isPlaying ? "Playing" : "Play Preview"}
-          </button>
+            <Play size={20} fill="#fff" strokeWidth={0} />
+            {isActive && player.isPlaying ? "Now Playing" : "Play Preview"}
+          </motion.button>
         </div>
       </div>
-    </div>
+    </motion.div>
   );
 }
 
@@ -93,22 +144,29 @@ function Section({
   title, children, onMore,
 }: { title: string; children: React.ReactNode; onMore?: () => void }) {
   return (
-    <div style={{ marginBottom: 40 }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
-        <h2 style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 22, color: "#f0f0f0", letterSpacing: "0.04em" }}>
+    <motion.div 
+      initial={{ opacity: 0, y: 20 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true, margin: "-50px" }}
+      transition={{ duration: 0.5 }}
+      style={{ marginBottom: 48 }}
+    >
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 24 }}>
+        <h2 style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 28, color: "#fff", letterSpacing: "0.06em", textShadow: "0 2px 8px rgba(0,0,0,0.5)" }}>
           {title}
         </h2>
         {onMore && (
-          <button
+          <motion.button
+            whileHover={{ x: 5, color: "#c0bdf5" }}
             onClick={onMore}
-            style={{ background: "none", border: "none", cursor: "pointer", color: "#7F77DD", fontSize: 12.5, display: "flex", alignItems: "center", gap: 2 }}
+            style={{ background: "none", border: "none", cursor: "pointer", color: "#9D97E8", fontSize: 14, fontWeight: 600, display: "flex", alignItems: "center", gap: 4, transition: "color 0.2s" }}
           >
-            See all <ChevronRight size={14} />
-          </button>
+            See all <ChevronRight size={16} strokeWidth={2.5} />
+          </motion.button>
         )}
       </div>
       {children}
-    </div>
+    </motion.div>
   );
 }
 
@@ -117,10 +175,15 @@ function HScrollRow({ children }: { children: React.ReactNode }) {
     <div
       style={{
         display: "flex",
-        gap: 16,
+        gap: 24,
         overflowX: "auto",
-        paddingBottom: 8,
+        paddingBottom: 24,
+        paddingTop: 8,
         scrollbarWidth: "none",
+        marginLeft: -32,
+        paddingLeft: 32,
+        marginRight: -32,
+        paddingRight: 32,
       }}
     >
       <style>{`.hscroll::-webkit-scrollbar { display: none; }`}</style>
@@ -142,45 +205,40 @@ function MusicVideosPreview() {
   if (!videos.length) return null;
 
   return (
-    <div style={{ marginBottom: 40 }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <MonitorPlay size={18} color="#7F77DD" />
-          <h2 style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 22, color: "#f0f0f0", letterSpacing: "0.04em" }}>
-            Music Videos
-          </h2>
-        </div>
-        <button
-          onClick={() => navigate("/music/videos")}
-          style={{ background: "none", border: "none", cursor: "pointer", color: "#7F77DD", fontSize: 12.5, display: "flex", alignItems: "center", gap: 2 }}
-        >
-          See all <ChevronRight size={14} />
-        </button>
-      </div>
-
-      <div style={{ display: "flex", gap: 16, overflowX: "auto", paddingBottom: 8, scrollbarWidth: "none" }}>
-        {videos.map((v) => (
-          <div
+    <Section title="Cinematic Experiences" onMore={() => navigate("/music/videos")}>
+      <HScrollRow>
+        {videos.map((v, i) => (
+          <motion.div
             key={v.id}
+            initial={{ opacity: 0, scale: 0.9 }}
+            whileInView={{ opacity: 1, scale: 1 }}
+            viewport={{ once: true }}
+            transition={{ delay: i * 0.1, type: "spring", stiffness: 200, damping: 20 }}
+            whileHover={{ y: -8 }}
             onClick={() => navigate(`/music/videos/${v.id}`)}
-            style={{ flexShrink: 0, width: 220, cursor: "pointer" }}
-            className="mv-preview-card"
+            style={{ flexShrink: 0, width: 280, cursor: "pointer" }}
+            className="group"
           >
-            <div style={{ position: "relative", paddingTop: "56.25%", borderRadius: 8, overflow: "hidden", background: "#111", marginBottom: 8 }}>
-              <img src={v.thumbnail} alt={v.title} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} />
+            <div style={{ position: "relative", paddingTop: "56.25%", borderRadius: 12, overflow: "hidden", background: "#111", marginBottom: 12, boxShadow: "0 8px 24px rgba(0,0,0,0.4)", border: "1px solid rgba(255,255,255,0.05)" }}>
+              <img src={v.thumbnail} alt={v.title} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", transition: "transform 0.5s ease" }} className="group-hover:scale-105" loading="lazy" />
+              <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(0,0,0,0.8), transparent 50%)" }} />
               {v.duration && (
-                <span style={{ position: "absolute", bottom: 5, right: 5, background: "rgba(0,0,0,0.85)", color: "#fff", fontSize: 10, fontWeight: 700, padding: "2px 5px", borderRadius: 3, fontFamily: "monospace" }}>
+                <span style={{ position: "absolute", bottom: 8, right: 8, background: "rgba(0,0,0,0.7)", backdropFilter: "blur(8px)", color: "#fff", fontSize: 11, fontWeight: 700, padding: "4px 8px", borderRadius: 6, fontFamily: "monospace", letterSpacing: "0.05em" }}>
                   {v.duration}
                 </span>
               )}
+              <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", opacity: 0, transition: "opacity 0.3s" }} className="group-hover:opacity-100">
+                <div style={{ width: 48, height: 48, borderRadius: "50%", background: "rgba(127,119,221,0.9)", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 4px 12px rgba(0,0,0,0.5)" }}>
+                  <Play size={24} fill="#fff" strokeWidth={0} style={{ marginLeft: 2 }} />
+                </div>
+              </div>
             </div>
-            <div style={{ fontSize: 12.5, fontWeight: 500, color: "#e0e0e0", lineHeight: 1.3, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden", marginBottom: 3 }}>{v.title}</div>
-            <div style={{ fontSize: 11.5, color: "#555" }}>{v.author}</div>
-          </div>
+            <div style={{ fontSize: 14, fontWeight: 600, color: "#fff", lineHeight: 1.4, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden", marginBottom: 4, transition: "color 0.2s" }} className="group-hover:text-[#c0bdf5]">{v.title}</div>
+            <div style={{ fontSize: 12, color: "#888" }}>{v.author}</div>
+          </motion.div>
         ))}
-      </div>
-      <style>{`.mv-preview-card:hover img { filter: brightness(1.1); } .mv-preview-card img { transition: filter 0.2s; }`}</style>
-    </div>
+      </HScrollRow>
+    </Section>
   );
 }
 
@@ -207,7 +265,7 @@ export function MusicHomePage() {
 
   const uniqueArtists = Array.from(
     new Map(hotTracks.map((t) => [t.artistId, t])).values()
-  ).slice(0, 8);
+  ).slice(0, 10);
 
   const isSearching = debouncedQuery.trim().length > 1;
 
@@ -216,29 +274,40 @@ export function MusicHomePage() {
       style={{
         minHeight: "100vh",
         background: "#05050c",
-        padding: "28px 32px",
-        paddingBottom: `${MINI_PLAYER_HEIGHT + 24}px`,
+        backgroundImage: "radial-gradient(circle at 50% 0%, rgba(127,119,221,0.05) 0%, transparent 50%)",
+        padding: "40px 48px",
+        paddingBottom: `${MINI_PLAYER_HEIGHT + 40}px`,
         fontFamily: "'DM Sans', sans-serif",
       }}
     >
       {/* Header */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 32 }}>
-        <h1 style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 32, color: "#fff", letterSpacing: "0.04em" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 48 }}>
+        <motion.h1 
+          initial={{ opacity: 0, x: -20 }}
+          animate={{ opacity: 1, x: 0 }}
+          style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 42, color: "#fff", letterSpacing: "0.06em", textShadow: "0 2px 10px rgba(0,0,0,0.5)" }}
+        >
           ho<span style={{ color: "#7F77DD" }}>o</span>dMusic
-        </h1>
-        <div
+        </motion.h1>
+        <motion.div
+          initial={{ opacity: 0, x: 20 }}
+          animate={{ opacity: 1, x: 0 }}
           style={{
             display: "flex",
             alignItems: "center",
-            gap: 10,
-            background: "rgba(255,255,255,0.05)",
-            border: "1px solid rgba(255,255,255,0.08)",
-            borderRadius: 10,
-            padding: "8px 14px",
-            width: 280,
+            gap: 12,
+            background: "rgba(255,255,255,0.03)",
+            border: "1px solid rgba(255,255,255,0.1)",
+            borderRadius: 16,
+            padding: "12px 20px",
+            width: 320,
+            backdropFilter: "blur(12px)",
+            boxShadow: "0 8px 32px rgba(0,0,0,0.2)",
+            transition: "border-color 0.2s",
           }}
+          className="focus-within:border-[#7F77DD]"
         >
-          <Search size={15} color="#666" />
+          <Search size={18} color="#888" />
           <input
             type="text"
             value={searchQuery}
@@ -246,99 +315,125 @@ export function MusicHomePage() {
             placeholder="Search artists, songs, albums…"
             style={{
               background: "none", border: "none", outline: "none",
-              color: "#e0e0e0", fontSize: 13.5, flex: 1,
+              color: "#fff", fontSize: 14, flex: 1,
               fontFamily: "'DM Sans', sans-serif",
             }}
           />
-        </div>
+        </motion.div>
       </div>
 
       {/* Search results */}
       {isSearching ? (
-        <div>
-          <div style={{ fontSize: 13, color: "#666", marginBottom: 16 }}>
-            {searching ? "Searching…" : `Results for "${debouncedQuery}"`}
+        <motion.div initial="hidden" animate="show" variants={containerVariants}>
+          <div style={{ fontSize: 15, fontWeight: 600, color: "#aaa", marginBottom: 24, letterSpacing: "0.02em" }}>
+            {searching ? "Searching the vaults…" : `Results for "${debouncedQuery}"`}
           </div>
-          <div style={{ display: "flex", flexDirection: "column" }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             {searchResults.map((t, i) => (
-              <TrackRow key={t.trackId} track={t} index={i} queue={searchResults} showArt />
+              <motion.div key={t.trackId} variants={itemVariants}>
+                <TrackRow track={t} index={i} queue={searchResults} showArt />
+              </motion.div>
             ))}
           </div>
-        </div>
+        </motion.div>
       ) : (
         <>
           {/* Hero */}
           {featuredTrack && <HeroTrack track={featuredTrack} queue={hotTracks} />}
 
           {/* Top Tracks */}
-          <Section title="Hot Right Now">
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 32px" }}>
+          <Section title="Late Night Rotation">
+            <motion.div 
+              variants={containerVariants}
+              initial="hidden"
+              whileInView="show"
+              viewport={{ once: true, margin: "-100px" }}
+              style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px 48px" }}
+            >
               {hotTracks.slice(0, 16).map((t, i) => (
-                <TrackRow key={t.trackId} track={t} index={i} queue={hotTracks} showArt />
+                <motion.div key={t.trackId} variants={itemVariants}>
+                  <TrackRow track={t} index={i} queue={hotTracks} showArt />
+                </motion.div>
               ))}
-            </div>
-          </Section>
-
-          {/* Genres */}
-          <Section title="Browse by Genre">
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
-              {GENRES.map((g) => (
-                <div
-                  key={g.label}
-                  onClick={() => navigate(`/music/genre/${encodeURIComponent(g.query)}?label=${encodeURIComponent(g.label)}`)}
-                  style={{
-                    padding: "20px 18px",
-                    borderRadius: 10,
-                    background: `linear-gradient(135deg, ${g.color}22, ${g.color}11)`,
-                    border: `1px solid ${g.color}33`,
-                    cursor: "pointer",
-                    position: "relative",
-                    overflow: "hidden",
-                    transition: "transform 0.15s",
-                  }}
-                  className="genre-tile"
-                >
-                  <div style={{ fontSize: 16, fontWeight: 600, color: "#f0f0f0" }}>{g.label}</div>
-                  <div
-                    style={{
-                      position: "absolute",
-                      bottom: -12,
-                      right: -12,
-                      width: 70,
-                      height: 70,
-                      borderRadius: 8,
-                      background: `${g.color}33`,
-                      transform: "rotate(20deg)",
-                    }}
-                  />
-                </div>
-              ))}
-            </div>
+            </motion.div>
           </Section>
 
           {/* Artists */}
-          <Section title="Artists">
+          <Section title="Artists to Watch" onMore={() => {}}>
             <HScrollRow>
-              {uniqueArtists.map((t) => (
-                <ArtistCard
+              {uniqueArtists.map((t, i) => (
+                <motion.div 
                   key={t.artistId}
-                  artistId={t.artistId}
-                  artistName={t.artistName}
-                  artworkUrl100={t.artworkUrl100}
-                  genre={t.primaryGenreName}
-                />
+                  initial={{ opacity: 0, scale: 0.8 }}
+                  whileInView={{ opacity: 1, scale: 1 }}
+                  viewport={{ once: true }}
+                  transition={{ delay: i * 0.05, type: "spring", stiffness: 200 }}
+                >
+                  <ArtistCard
+                    artistId={t.artistId}
+                    artistName={t.artistName}
+                    artworkUrl100={t.artworkUrl100}
+                    genre={t.primaryGenreName}
+                  />
+                </motion.div>
               ))}
             </HScrollRow>
           </Section>
 
           {/* Music Videos */}
           <MusicVideosPreview />
+
+          {/* Genres */}
+          <Section title="Mood & Sound">
+            <motion.div 
+              variants={containerVariants}
+              initial="hidden"
+              whileInView="show"
+              viewport={{ once: true }}
+              style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 20 }}
+            >
+              {GENRES.map((g) => (
+                <motion.div key={g.label} variants={itemVariants}>
+                  <motion.div
+                    whileHover={{ scale: 1.03, y: -4 }}
+                    whileTap={{ scale: 0.97 }}
+                    onClick={() => navigate(`/music/genre/${encodeURIComponent(g.query)}?label=${encodeURIComponent(g.label)}`)}
+                    style={{
+                      padding: "32px 24px",
+                      borderRadius: 16,
+                      background: `linear-gradient(135deg, ${g.color}33, ${g.color}11)`,
+                      border: `1px solid ${g.color}44`,
+                      cursor: "pointer",
+                      position: "relative",
+                      overflow: "hidden",
+                      boxShadow: "0 8px 24px rgba(0,0,0,0.2)",
+                    }}
+                    className="group"
+                  >
+                    <div style={{ position: "relative", zIndex: 2, fontSize: 22, fontWeight: 700, color: "#fff", letterSpacing: "0.02em", textShadow: "0 2px 4px rgba(0,0,0,0.5)" }}>{g.label}</div>
+                    <motion.div
+                      style={{
+                        position: "absolute",
+                        bottom: -20,
+                        right: -20,
+                        width: 120,
+                        height: 120,
+                        borderRadius: 16,
+                        background: `linear-gradient(135deg, ${g.color}66, transparent)`,
+                        transform: "rotate(15deg)",
+                        zIndex: 1,
+                        transition: "transform 0.4s ease",
+                      }}
+                      className="group-hover:rotate-0 group-hover:scale-110"
+                    />
+                  </motion.div>
+                </motion.div>
+              ))}
+            </motion.div>
+          </Section>
+
         </>
       )}
-
-      <style>{`
-        .genre-tile:hover { transform: scale(1.02) !important; }
-      `}</style>
     </div>
   );
 }

@@ -1,6 +1,7 @@
 import { useLocation } from "wouter";
 import { artworkUrl } from "../lib/musicApi";
 import { Music } from "lucide-react";
+import { motion } from "framer-motion";
 
 interface Props {
   artistId: number;
@@ -11,54 +12,64 @@ interface Props {
 
 export function ArtistCard({ artistName, artworkUrl100, genre }: Props) {
   const [, navigate] = useLocation();
-  const art = artworkUrl100 ? artworkUrl(artworkUrl100, 200) : "";
+  const art = artworkUrl100 ? artworkUrl(artworkUrl100, 300) : "";
 
   return (
-    <div
-      style={{ width: 140, flexShrink: 0, cursor: "pointer", textAlign: "center" }}
+    <motion.div
+      whileHover={{ y: -8 }}
+      style={{ width: 160, flexShrink: 0, cursor: "pointer", textAlign: "center", display: "flex", flexDirection: "column", alignItems: "center" }}
       onClick={() => navigate(`/music/artist/${encodeURIComponent(artistName)}`)}
-      className="artist-card"
+      className="group"
     >
-      <div
+      <motion.div
+        whileHover={{ scale: 1.05, boxShadow: "0 20px 40px rgba(127,119,221,0.2)" }}
+        transition={{ type: "spring", stiffness: 300, damping: 20 }}
         style={{
-          width: 140,
-          height: 140,
+          width: 160,
+          height: 160,
           borderRadius: "50%",
           overflow: "hidden",
-          marginBottom: 10,
-          background: "rgba(127,119,221,0.15)",
+          marginBottom: 16,
+          background: "linear-gradient(135deg, rgba(127,119,221,0.2), rgba(127,119,221,0.05))",
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
           position: "relative",
+          boxShadow: "0 8px 24px rgba(0,0,0,0.4)",
+          border: "1px solid rgba(255,255,255,0.05)",
         }}
       >
         {art ? (
-          <img src={art} alt={artistName} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+          <img 
+            src={art} 
+            alt={artistName} 
+            style={{ width: "100%", height: "100%", objectFit: "cover", transition: "transform 0.5s ease" }} 
+            className="group-hover:scale-110"
+            loading="lazy"
+          />
         ) : (
-          <Music size={40} color="#7F77DD" />
+          <Music size={48} color="#7F77DD" strokeWidth={1.5} />
         )}
         <div
-          className="artist-overlay"
           style={{
             position: "absolute",
             inset: 0,
-            background: "rgba(0,0,0,0)",
-            transition: "background 0.2s",
+            background: "linear-gradient(to top, rgba(127,119,221,0.4), transparent)",
+            opacity: 0,
+            transition: "opacity 0.3s ease",
             borderRadius: "50%",
           }}
+          className="group-hover:opacity-100"
         />
-      </div>
-      <div style={{ fontSize: 13, fontWeight: 500, color: "#e8e8e8", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+      </motion.div>
+      <div style={{ fontSize: 15, fontWeight: 600, color: "#fff", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", width: "100%", letterSpacing: "0.02em" }}>
         {artistName}
       </div>
       {genre && (
-        <div style={{ fontSize: 11.5, color: "#666", marginTop: 2 }}>{genre}</div>
+        <div style={{ fontSize: 12, color: "#888", marginTop: 4, letterSpacing: "0.05em", textTransform: "uppercase" }}>
+          {genre}
+        </div>
       )}
-
-      <style>{`
-        .artist-card:hover .artist-overlay { background: rgba(127,119,221,0.15) !important; }
-      `}</style>
-    </div>
+    </motion.div>
   );
 }

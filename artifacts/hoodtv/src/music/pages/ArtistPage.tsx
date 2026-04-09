@@ -5,6 +5,17 @@ import { searchTracks, artworkUrl, type Track } from "../lib/musicApi";
 import { useMusicPlayer } from "../context/MusicPlayerContext";
 import { TrackRow } from "../components/TrackRow";
 import { MINI_PLAYER_HEIGHT } from "../components/MiniPlayer";
+import { motion } from "framer-motion";
+
+const containerVariants = {
+  hidden: { opacity: 0 },
+  show: { opacity: 1, transition: { staggerChildren: 0.05 } }
+};
+
+const itemVariants = {
+  hidden: { opacity: 0, y: 20 },
+  show: { opacity: 1, y: 0, transition: { type: "spring", stiffness: 300, damping: 24 } }
+};
 
 export function ArtistPage() {
   const { id } = useParams<{ id: string }>();
@@ -14,12 +25,12 @@ export function ArtistPage() {
 
   const { data: tracks = [], isLoading } = useQuery<Track[]>({
     queryKey: ["artist-tracks", artistName],
-    queryFn: () => searchTracks(artistName, 20),
+    queryFn: () => searchTracks(artistName, 30),
     staleTime: 10 * 60 * 1000,
     enabled: !!artistName,
   });
 
-  const art = tracks[0]?.artworkUrl100 ? artworkUrl(tracks[0].artworkUrl100, 300) : "";
+  const art = tracks[0]?.artworkUrl100 ? artworkUrl(tracks[0].artworkUrl100, 600) : "";
 
   const handlePlayAll = () => {
     const playable = tracks.filter((t) => t.previewUrl);
@@ -39,94 +50,139 @@ export function ArtistPage() {
         minHeight: "100vh",
         background: "#05050c",
         fontFamily: "'DM Sans', sans-serif",
-        paddingBottom: `${MINI_PLAYER_HEIGHT + 24}px`,
+        paddingBottom: `${MINI_PLAYER_HEIGHT + 40}px`,
       }}
     >
-      {/* Hero */}
-      <div style={{ position: "relative", minHeight: 280, overflow: "hidden" }}>
+      {/* Cinematic Hero */}
+      <div style={{ position: "relative", minHeight: 400, overflow: "hidden", marginBottom: 40 }}>
         {art && (
-          <div
+          <motion.div
+            initial={{ scale: 1.1, opacity: 0 }}
+            animate={{ scale: 1, opacity: 0.4 }}
+            transition={{ duration: 1.5, ease: "easeOut" }}
             style={{
               position: "absolute",
               inset: 0,
               backgroundImage: `url(${art})`,
               backgroundSize: "cover",
-              backgroundPosition: "center top",
-              filter: "blur(40px) saturate(1.4)",
-              opacity: 0.3,
-              transform: "scale(1.1)",
+              backgroundPosition: "center 20%",
+              filter: "blur(20px) saturate(1.5)",
             }}
           />
         )}
-        <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to bottom, transparent 40%, #05050c)" }} />
-        <div style={{ position: "relative", padding: "24px 32px 32px" }}>
-          <button
-            onClick={() => navigate("/music")}
+        <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to bottom, rgba(5,5,12,0.2) 0%, rgba(5,5,12,0.8) 60%, #05050c 100%)" }} />
+        
+        <div style={{ position: "relative", padding: "40px 48px", height: "100%", display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
+          <motion.button
+            whileHover={{ x: -4, backgroundColor: "rgba(255,255,255,0.1)" }}
+            onClick={() => window.history.back()}
             style={{
-              display: "flex", alignItems: "center", gap: 6,
-              background: "rgba(0,0,0,0.4)", border: "none",
-              color: "#aaa", cursor: "pointer", fontSize: 13,
-              borderRadius: 20, padding: "6px 14px", marginBottom: 32,
+              display: "inline-flex", alignItems: "center", gap: 8,
+              background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)",
+              color: "#fff", cursor: "pointer", fontSize: 14, fontWeight: 500,
+              borderRadius: 30, padding: "8px 20px", alignSelf: "flex-start",
+              backdropFilter: "blur(12px)",
             }}
           >
-            <ArrowLeft size={14} /> Back
-          </button>
-          <div style={{ display: "flex", alignItems: "flex-end", gap: 24 }}>
+            <ArrowLeft size={16} /> Return
+          </motion.button>
+
+          <div style={{ display: "flex", alignItems: "flex-end", gap: 40, marginTop: "auto", paddingTop: 80 }}>
             {art && (
-              <img
-                src={art}
-                alt={artistName}
-                style={{ width: 130, height: 130, borderRadius: "50%", objectFit: "cover", boxShadow: "0 8px 32px rgba(0,0,0,0.5)", flexShrink: 0 }}
-              />
+              <motion.div
+                initial={{ y: 40, opacity: 0 }}
+                animate={{ y: 0, opacity: 1 }}
+                transition={{ duration: 0.6, delay: 0.1, type: "spring", stiffness: 200 }}
+              >
+                <img
+                  src={art}
+                  alt={artistName}
+                  style={{ width: 220, height: 220, borderRadius: "50%", objectFit: "cover", boxShadow: "0 20px 40px rgba(0,0,0,0.6)", flexShrink: 0, border: "2px solid rgba(255,255,255,0.1)" }}
+                />
+              </motion.div>
             )}
-            <div>
-              <div style={{ fontSize: 11, color: "#9D97E8", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 6 }}>Artist</div>
-              <h1 style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 48, color: "#fff", margin: "0 0 16px" }}>
+            <div style={{ paddingBottom: 16 }}>
+              <motion.div 
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: 0.2 }}
+                style={{ fontSize: 13, fontWeight: 700, color: "#9D97E8", letterSpacing: "0.2em", textTransform: "uppercase", marginBottom: 12 }}
+              >
+                Verified Artist
+              </motion.div>
+              <motion.h1 
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.3 }}
+                style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 80, color: "#fff", margin: "0 0 24px", lineHeight: 1, textShadow: "0 4px 12px rgba(0,0,0,0.5)" }}
+              >
                 {artistName}
-              </h1>
-              <div style={{ display: "flex", gap: 10 }}>
-                <button
+              </motion.h1>
+              <motion.div 
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.4 }}
+                style={{ display: "flex", gap: 16 }}
+              >
+                <motion.button
+                  whileHover={{ scale: 1.05, boxShadow: "0 0 20px rgba(127,119,221,0.4)" }}
+                  whileTap={{ scale: 0.95 }}
                   onClick={handlePlayAll}
                   style={{
-                    display: "flex", alignItems: "center", gap: 8,
-                    background: "#7F77DD", border: "none", cursor: "pointer",
-                    color: "#fff", fontSize: 13, fontWeight: 600,
-                    padding: "10px 22px", borderRadius: 24,
+                    display: "flex", alignItems: "center", gap: 10,
+                    background: "linear-gradient(135deg, #7F77DD, #9D97E8)", border: "none", cursor: "pointer",
+                    color: "#fff", fontSize: 14, fontWeight: 700, letterSpacing: "0.05em",
+                    padding: "14px 32px", borderRadius: 30,
                   }}
                 >
-                  <Play size={16} fill="#fff" strokeWidth={0} />
+                  <Play size={18} fill="#fff" strokeWidth={0} />
                   Play All
-                </button>
-                <button
+                </motion.button>
+                <motion.button
+                  whileHover={{ scale: 1.05, backgroundColor: "rgba(127,119,221,0.2)" }}
+                  whileTap={{ scale: 0.95 }}
                   onClick={handleShuffle}
                   style={{
-                    display: "flex", alignItems: "center", gap: 8,
-                    background: "rgba(127,119,221,0.15)", border: "1px solid rgba(127,119,221,0.3)",
-                    cursor: "pointer", color: "#9D97E8", fontSize: 13, fontWeight: 500,
-                    padding: "10px 22px", borderRadius: 24,
+                    display: "flex", alignItems: "center", gap: 10,
+                    background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)",
+                    cursor: "pointer", color: "#fff", fontSize: 14, fontWeight: 600, letterSpacing: "0.05em",
+                    padding: "14px 32px", borderRadius: 30, backdropFilter: "blur(12px)",
                   }}
                 >
-                  <Shuffle size={16} />
+                  <Shuffle size={18} />
                   Shuffle
-                </button>
-              </div>
+                </motion.button>
+              </motion.div>
             </div>
           </div>
         </div>
       </div>
 
-      <div style={{ padding: "0 32px" }}>
-        <h2 style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 20, color: "#f0f0f0", letterSpacing: "0.04em", marginBottom: 12 }}>
-          Top Tracks
+      <div style={{ padding: "0 48px" }}>
+        <h2 style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 28, color: "#fff", letterSpacing: "0.06em", marginBottom: 24 }}>
+          Essential Tracks
         </h2>
         {isLoading ? (
-          <div style={{ color: "#555", fontSize: 13 }}>Loading…</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+             {Array.from({length: 5}).map((_, i) => (
+                <div key={i} style={{ height: 72, borderRadius: 12, background: "rgba(255,255,255,0.03)", animation: "pulse 2s infinite" }} />
+             ))}
+          </div>
         ) : tracks.length === 0 ? (
-          <div style={{ color: "#555", fontSize: 13 }}>No tracks found.</div>
+          <div style={{ color: "#666", fontSize: 15, padding: "40px 0", textAlign: "center" }}>No tracks found in the vault.</div>
         ) : (
-          tracks.map((t, i) => (
-            <TrackRow key={t.trackId} track={t} index={i} queue={tracks} showAlbum />
-          ))
+          <motion.div 
+            variants={containerVariants}
+            initial="hidden"
+            animate="show"
+            style={{ display: "flex", flexDirection: "column", gap: 8 }}
+          >
+            {tracks.map((t, i) => (
+              <motion.div key={t.trackId} variants={itemVariants}>
+                <TrackRow track={t} index={i} queue={tracks} showAlbum showArt />
+              </motion.div>
+            ))}
+          </motion.div>
         )}
       </div>
     </div>
