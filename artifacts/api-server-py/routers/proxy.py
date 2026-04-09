@@ -117,9 +117,14 @@ async def proxy_hls(url: str):
             },
         )
     else:
-        media_type = content_type if content_type else "application/octet-stream"
-        if "text/html" in media_type or "text/plain" in media_type:
-            media_type = "application/octet-stream"
+        # Segments may be disguised with fake extensions (.jpg, .html, .css, etc.)
+        # Always serve as MPEG-TS so VideoJS can decode them correctly
+        raw_path = url.split("?")[0].lower()
+        non_ts_exts = (".m3u8", ".vtt", ".srt", ".ass", ".key")
+        if any(raw_path.endswith(ext) for ext in non_ts_exts):
+            media_type = content_type if content_type else "application/octet-stream"
+        else:
+            media_type = "video/mp2t"
         return Response(
             content=resp.content,
             media_type=media_type,
