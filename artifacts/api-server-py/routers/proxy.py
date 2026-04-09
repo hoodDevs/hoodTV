@@ -19,6 +19,8 @@ _REFERER_MAP = {
     "megafiles.store":              ("https://player.videasy.net/", "https://player.videasy.net"),
     "serversicuro.cc":              ("https://player.videasy.net/", "https://player.videasy.net"),
     "uskevinpowell89.workers.dev":  ("https://player.videasy.net/", "https://player.videasy.net"),
+    "skyember44.online":            ("https://player.videasy.net/", "https://player.videasy.net"),
+    "skyember":                     ("https://player.videasy.net/", "https://player.videasy.net"),
 }
 
 def _get_headers(url: str) -> dict:
@@ -42,19 +44,21 @@ def _get_headers(url: str) -> dict:
     }
 
 
-def _fetch_with_retry(url: str, max_retries: int = 2, timeout: int = 25) -> cffi_requests.Response:
+def _fetch_with_retry(url: str, max_retries: int = 2, timeout: int = 25):
+    """Returns (response, final_url_after_redirects)."""
     last_err = None
     headers = _get_headers(url)
     for attempt in range(max_retries + 1):
         try:
             session = cffi_requests.Session(impersonate="chrome131")
-            resp = session.get(url, headers=headers, timeout=timeout)
+            resp = session.get(url, headers=headers, timeout=timeout, allow_redirects=True)
+            final_url = getattr(resp, "url", None) or url
             if resp.status_code == 200:
-                return resp
+                return resp, final_url
             if resp.status_code in (429, 503) and attempt < max_retries:
                 time.sleep(1.5 * (attempt + 1))
                 continue
-            return resp
+            return resp, final_url
         except Exception as e:
             last_err = e
             if attempt < max_retries:
@@ -146,7 +150,7 @@ async def proxy_hls(request: Request, url: str, as_media: int = 0):
     is_head = request.method == "HEAD"
 
     try:
-        resp = _fetch_with_retry(url)
+        resp, final_url = _fetch_with_retry(url)
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Upstream fetch failed: {e}")
 
@@ -166,10 +170,13 @@ async def proxy_hls(request: Request, url: str, as_media: int = 0):
 
         body_text = resp.text
         proxy_prefix = "/api/proxy/hls?url="
+        # Use the final URL after any CDN redirects as the base for resolving
+        # relative paths — ensures segment URLs point to the correct origin server
+        base_url = final_url
 
         # If this is a master playlist already (has variant streams), just rewrite it
         if _is_master_playlist(body_text):
-            rewritten = _rewrite_m3u8(body_text, url, proxy_prefix)
+            rewritten = _rewrite_m3u8(body_text, base_url, proxy_prefix)
             return Response(
                 content=rewritten,
                 media_type="application/vnd.apple.mpegurl",
@@ -179,7 +186,7 @@ async def proxy_hls(request: Request, url: str, as_media: int = 0):
         # Media playlist: either serve as master wrapper or as the raw rewritten playlist
         if as_media:
             # Return the rewritten media playlist directly (segment URLs proxied)
-            rewritten = _rewrite_m3u8(body_text, url, proxy_prefix)
+            rewritten = _rewrite_m3u8(body_text, base_url, proxy_prefix)
             return Response(
                 content=rewritten,
                 media_type="application/vnd.apple.mpegurl",
