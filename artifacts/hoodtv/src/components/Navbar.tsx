@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Link, useLocation } from "wouter";
-import { Home, Film, Tv, TrendingUp, Bookmark, Search, X } from "lucide-react";
+import { Home, Film, Tv, TrendingUp, Bookmark, Search, X, Music } from "lucide-react";
 
 export const SIDEBAR_WIDTH = 220;
 
@@ -34,6 +34,7 @@ export function Navbar() {
     { label: "Home", href: "/", icon: Home },
     { label: "Movies", href: "/movies", icon: Film },
     { label: "TV Shows", href: "/tv", icon: Tv },
+    { label: "Music", href: "/music", icon: Music },
     { label: "Trending", href: "/trending", icon: TrendingUp },
     { label: "My List", href: "/mylist", icon: Bookmark },
   ];

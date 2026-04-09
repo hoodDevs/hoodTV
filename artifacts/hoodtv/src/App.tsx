@@ -11,6 +11,12 @@ import WatchPage from "@/pages/WatchPage";
 import MyListPage from "@/pages/MyListPage";
 import TrendingPage from "@/pages/TrendingPage";
 import { Navbar, SIDEBAR_WIDTH } from "@/components/Navbar";
+import { MusicPlayerProvider } from "@/music/context/MusicPlayerContext";
+import { MiniPlayer } from "@/music/components/MiniPlayer";
+import { MusicHomePage } from "@/music/pages/MusicHomePage";
+import { ArtistPage } from "@/music/pages/ArtistPage";
+import { AlbumPage } from "@/music/pages/AlbumPage";
+import { GenrePage } from "@/music/pages/GenrePage";
 
 const queryClient = new QueryClient();
 
@@ -26,6 +32,7 @@ function Layout({ children }: { children: React.ReactNode }) {
       <div style={{ flex: 1, marginLeft: `${SIDEBAR_WIDTH}px`, minWidth: 0 }}>
         {children}
       </div>
+      <MiniPlayer />
     </div>
   );
 }
@@ -46,6 +53,10 @@ function Router() {
         <Route path="/title/:id" component={TitlePage} />
         <Route path="/watch/:id" component={WatchPage} />
         <Route path="/mylist" component={MyListPage} />
+        <Route path="/music" component={MusicHomePage} />
+        <Route path="/music/artist/:id" component={ArtistPage} />
+        <Route path="/music/album/:id" component={AlbumPage} />
+        <Route path="/music/genre/:query" component={GenrePage} />
         <Route component={NotFound} />
       </Switch>
     </Layout>
@@ -56,9 +67,11 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
-        <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
-          <Router />
-        </WouterRouter>
+        <MusicPlayerProvider>
+          <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
+            <Router />
+          </WouterRouter>
+        </MusicPlayerProvider>
         <Toaster />
       </TooltipProvider>
     </QueryClientProvider>
