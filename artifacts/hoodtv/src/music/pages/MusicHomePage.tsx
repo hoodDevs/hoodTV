@@ -1,408 +1,246 @@
-import { useEffect, useState } from "react";
-import { Search, Play, ChevronRight, MonitorPlay } from "lucide-react";
+import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
-import { searchTracks, GENRES, artworkUrl, type Track } from "../lib/musicApi";
-import type { YtVideo } from "./MusicVideosPage";
-import { TrackRow } from "../components/TrackRow";
+import { Search } from "lucide-react";
 import { motion } from "framer-motion";
+import type { YtVideo } from "./MusicVideosPage";
 
-function useDebounce(value: string, ms = 400) {
-  const [debounced, setDebounced] = useState(value);
+function useDebounce(value: string, ms = 500) {
+  const [d, setD] = useState(value);
   useEffect(() => {
-    const t = setTimeout(() => setDebounced(value), ms);
+    const t = setTimeout(() => setD(value), ms);
     return () => clearTimeout(t);
   }, [value, ms]);
-  return debounced;
+  return d;
 }
 
-const containerVariants = {
-  hidden: { opacity: 0 },
-  show: {
-    opacity: 1,
-    transition: { staggerChildren: 0.05 }
-  }
-};
+const CHIPS = [
+  { label: "All",        q: "official music video 2024" },
+  { label: "Hip Hop",   q: "hip hop music video 2024" },
+  { label: "Pop",        q: "pop music video 2024" },
+  { label: "R&B",        q: "rnb soul music video 2024" },
+  { label: "Electronic", q: "electronic music video 2024" },
+  { label: "Rock",       q: "rock music video 2024" },
+  { label: "Mood & Sound", q: "lofi chill vibes 2024" },
+];
 
-const itemVariants = {
-  hidden: { opacity: 0, y: 20 },
-  show: { opacity: 1, y: 0, transition: { type: "spring", stiffness: 300, damping: 24 } }
-};
-
-function HeroTrack({ track }: { track: Track; queue: Track[] }) {
-  const [, navigate] = useLocation();
-  const art = artworkUrl(track.artworkUrl100, 600);
-
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 30 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.6, ease: "easeOut" }}
-      style={{
-        position: "relative",
-        width: "100%",
-        minHeight: 400,
-        borderRadius: 24,
-        overflow: "hidden",
-        marginBottom: 48,
-        background: "#0a0a14",
-        boxShadow: "0 20px 60px rgba(0,0,0,0.5)",
-      }}
-    >
-      <div
-        style={{
-          position: "absolute",
-          inset: 0,
-          backgroundImage: `url(${art})`,
-          backgroundSize: "cover",
-          backgroundPosition: "center",
-          filter: "blur(80px) saturate(2)",
-          opacity: 0.4,
-          transform: "scale(1.2)",
-        }}
-      />
-      <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to right, rgba(5,5,12,0.95) 0%, rgba(5,5,12,0.4) 50%, transparent 100%)" }} />
-      
-      <div
-        style={{
-          position: "relative",
-          display: "flex",
-          alignItems: "center",
-          gap: 40,
-          padding: "48px",
-          height: "100%",
-        }}
-      >
-        <motion.div 
-          initial={{ scale: 0.9, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
-          transition={{ delay: 0.2, duration: 0.5 }}
-          style={{ position: "relative", zIndex: 2 }}
-        >
-          <img
-            src={art}
-            alt={track.collectionName}
-            style={{ width: 240, height: 240, borderRadius: 16, objectFit: "cover", flexShrink: 0, boxShadow: "0 24px 60px rgba(0,0,0,0.6)" }}
-          />
-        </motion.div>
-        
-        <div style={{ zIndex: 2, flex: 1 }}>
-          <motion.div 
-            initial={{ opacity: 0, x: -20 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: 0.3 }}
-            style={{ fontSize: 13, fontWeight: 700, color: "#9D97E8", letterSpacing: "0.15em", textTransform: "uppercase", marginBottom: 12 }}
-          >
-            Featured Track
-          </motion.div>
-          <motion.div 
-            initial={{ opacity: 0, x: -20 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: 0.4 }}
-            style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 64, color: "#fff", lineHeight: 1, marginBottom: 12, textShadow: "0 4px 12px rgba(0,0,0,0.5)" }}
-          >
-            {track.trackName}
-          </motion.div>
-          <motion.div 
-            initial={{ opacity: 0, x: -20 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: 0.5 }}
-            style={{ fontSize: 18, color: "#e0e0e0", marginBottom: 32, opacity: 0.8 }}
-          >
-            {track.artistName} <span style={{ margin: "0 8px", color: "#666" }}>•</span> {track.collectionName}
-          </motion.div>
-          
-          <motion.button
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.6 }}
-            whileHover={{ scale: 1.05, boxShadow: "0 0 30px rgba(127,119,221,0.5)" }}
-            whileTap={{ scale: 0.95 }}
-            onClick={() => navigate(`/music/videos?q=${encodeURIComponent(track.artistName + " " + track.trackName)}`)}
-            style={{
-              display: "inline-flex", alignItems: "center", gap: 12,
-              padding: "16px 32px", borderRadius: 40,
-              background: "linear-gradient(135deg, #7F77DD, #9D97E8)", border: "none", cursor: "pointer",
-              color: "#fff", fontSize: 15, fontWeight: 700, letterSpacing: "0.03em",
-              boxShadow: "0 8px 24px rgba(127,119,221,0.3)",
-            }}
-          >
-            <Play size={20} fill="#fff" strokeWidth={0} />
-            Watch Video
-          </motion.button>
-        </div>
-      </div>
-    </motion.div>
-  );
+function avatarColor(name: string) {
+  let h = 0;
+  for (let i = 0; i < name.length; i++) h = (Math.imul(31, h) + name.charCodeAt(i)) | 0;
+  const hue = Math.abs(h) % 360;
+  return `hsl(${hue},55%,45%)`;
 }
 
-function Section({
-  title, children, onMore,
-}: { title: string; children: React.ReactNode; onMore?: () => void }) {
-  return (
-    <motion.div 
-      initial={{ opacity: 0, y: 20 }}
-      whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once: true, margin: "-50px" }}
-      transition={{ duration: 0.5 }}
-      style={{ marginBottom: 48 }}
-    >
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 24 }}>
-        <h2 style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 28, color: "#fff", letterSpacing: "0.06em", textShadow: "0 2px 8px rgba(0,0,0,0.5)" }}>
-          {title}
-        </h2>
-        {onMore && (
-          <motion.button
-            whileHover={{ x: 5, color: "#c0bdf5" }}
-            onClick={onMore}
-            style={{ background: "none", border: "none", cursor: "pointer", color: "#9D97E8", fontSize: 14, fontWeight: 600, display: "flex", alignItems: "center", gap: 4, transition: "color 0.2s" }}
-          >
-            See all <ChevronRight size={16} strokeWidth={2.5} />
-          </motion.button>
-        )}
-      </div>
-      {children}
-    </motion.div>
-  );
-}
+function VideoCard({ video, onClick }: { video: YtVideo; onClick: () => void }) {
+  const [hovered, setHovered] = useState(false);
+  const color = avatarColor(video.author || "YT");
+  const initials = (video.author || "YT").slice(0, 2).toUpperCase();
 
-function HScrollRow({ children }: { children: React.ReactNode }) {
   return (
     <div
-      style={{
-        display: "flex",
-        gap: 24,
-        overflowX: "auto",
-        paddingBottom: 24,
-        paddingTop: 8,
-        scrollbarWidth: "none",
-        marginLeft: -32,
-        paddingLeft: 32,
-        marginRight: -32,
-        paddingRight: 32,
-      }}
+      onClick={onClick}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{ cursor: "pointer", display: "flex", flexDirection: "column" }}
     >
-      <style>{`.hscroll::-webkit-scrollbar { display: none; }`}</style>
-      {children}
+      {/* Thumbnail */}
+      <div style={{
+        position: "relative", paddingTop: "56.25%",
+        borderRadius: 12, overflow: "hidden",
+        background: "#1a1a1a", marginBottom: 12,
+        transform: hovered ? "scale(1.02)" : "scale(1)",
+        transition: "transform 0.25s ease",
+      }}>
+        <img
+          src={video.thumbnail}
+          alt={video.title}
+          style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }}
+          loading="lazy"
+        />
+        {video.duration && (
+          <span style={{
+            position: "absolute", bottom: 6, right: 6,
+            background: "rgba(0,0,0,0.85)", color: "#fff",
+            fontSize: 11, fontWeight: 700, padding: "2px 7px", borderRadius: 4,
+            fontFamily: "monospace", letterSpacing: "0.04em",
+          }}>
+            {video.duration}
+          </span>
+        )}
+      </div>
+
+      {/* Info row */}
+      <div style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
+        <div style={{
+          width: 36, height: 36, borderRadius: "50%", flexShrink: 0,
+          background: color, display: "flex", alignItems: "center",
+          justifyContent: "center", fontSize: 12, fontWeight: 700,
+          color: "#fff", marginTop: 2,
+        }}>
+          {initials}
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{
+            fontSize: 14, fontWeight: 600,
+            color: hovered ? "#c0bdf5" : "#fff",
+            lineHeight: 1.4,
+            display: "-webkit-box",
+            WebkitLineClamp: 2,
+            WebkitBoxOrient: "vertical",
+            overflow: "hidden",
+            marginBottom: 4,
+            transition: "color 0.2s",
+          }}>
+            {video.title}
+          </div>
+          <div style={{ fontSize: 12, color: "#aaa", marginBottom: 2 }}>{video.author}</div>
+          <div style={{ fontSize: 12, color: "#666" }}>
+            {[video.views, video.publishedAt].filter(Boolean).join(" • ")}
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
 
-function MusicVideosPreview() {
-  const [, navigate] = useLocation();
-  const { data } = useQuery<{ videos: YtVideo[] }>({
-    queryKey: ["yt-videos-preview"],
-    queryFn: () => fetch("/api/yt/videos?q=official+music+video+2024&limit=8").then((r) => r.json()),
-    staleTime: 10 * 60 * 1000,
-    retry: false,
-  });
-
-  const videos = data?.videos ?? [];
-  if (!videos.length) return null;
-
+function SkeletonGrid() {
   return (
-    <Section title="Cinematic Experiences" onMore={() => navigate("/music/videos")}>
-      <HScrollRow>
-        {videos.map((v, i) => (
-          <motion.div
-            key={v.id}
-            initial={{ opacity: 0, scale: 0.9 }}
-            whileInView={{ opacity: 1, scale: 1 }}
-            viewport={{ once: true }}
-            transition={{ delay: i * 0.1, type: "spring", stiffness: 200, damping: 20 }}
-            whileHover={{ y: -8 }}
-            onClick={() => navigate(`/music/videos/${v.id}`)}
-            style={{ flexShrink: 0, width: 280, cursor: "pointer" }}
-            className="group"
-          >
-            <div style={{ position: "relative", paddingTop: "56.25%", borderRadius: 12, overflow: "hidden", background: "#111", marginBottom: 12, boxShadow: "0 8px 24px rgba(0,0,0,0.4)", border: "1px solid rgba(255,255,255,0.05)" }}>
-              <img src={v.thumbnail} alt={v.title} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", transition: "transform 0.5s ease" }} className="group-hover:scale-105" loading="lazy" />
-              <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(0,0,0,0.8), transparent 50%)" }} />
-              {v.duration && (
-                <span style={{ position: "absolute", bottom: 8, right: 8, background: "rgba(0,0,0,0.7)", backdropFilter: "blur(8px)", color: "#fff", fontSize: 11, fontWeight: 700, padding: "4px 8px", borderRadius: 6, fontFamily: "monospace", letterSpacing: "0.05em" }}>
-                  {v.duration}
-                </span>
-              )}
-              <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", opacity: 0, transition: "opacity 0.3s" }} className="group-hover:opacity-100">
-                <div style={{ width: 48, height: 48, borderRadius: "50%", background: "rgba(127,119,221,0.9)", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 4px 12px rgba(0,0,0,0.5)" }}>
-                  <Play size={24} fill="#fff" strokeWidth={0} style={{ marginLeft: 2 }} />
-                </div>
-              </div>
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: "32px 20px" }}>
+      {Array.from({ length: 12 }).map((_, i) => (
+        <div key={i}>
+          <div style={{ position: "relative", paddingTop: "56.25%", borderRadius: 12, background: "rgba(255,255,255,0.06)", marginBottom: 12 }} />
+          <div style={{ display: "flex", gap: 12 }}>
+            <div style={{ width: 36, height: 36, borderRadius: "50%", background: "rgba(255,255,255,0.06)", flexShrink: 0 }} />
+            <div style={{ flex: 1 }}>
+              <div style={{ height: 13, borderRadius: 4, background: "rgba(255,255,255,0.06)", marginBottom: 8 }} />
+              <div style={{ height: 12, borderRadius: 4, background: "rgba(255,255,255,0.04)", width: "55%", marginBottom: 6 }} />
+              <div style={{ height: 11, borderRadius: 4, background: "rgba(255,255,255,0.03)", width: "40%" }} />
             </div>
-            <div style={{ fontSize: 14, fontWeight: 600, color: "#fff", lineHeight: 1.4, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden", marginBottom: 4, transition: "color 0.2s" }} className="group-hover:text-[#c0bdf5]">{v.title}</div>
-            <div style={{ fontSize: 12, color: "#888" }}>{v.author}</div>
-          </motion.div>
-        ))}
-      </HScrollRow>
-    </Section>
+          </div>
+        </div>
+      ))}
+    </div>
   );
 }
 
 export function MusicHomePage() {
-  const [searchQuery, setSearchQuery] = useState("");
-  const debouncedQuery = useDebounce(searchQuery);
   const [, navigate] = useLocation();
+  const [activeChip, setActiveChip] = useState(0);
+  const [searchQuery, setSearchQuery] = useState("");
+  const debouncedSearch = useDebounce(searchQuery);
 
-  const { data: hotTracks = [] } = useQuery<Track[]>({
-    queryKey: ["music-hot"],
-    queryFn: () => searchTracks("top hits 2024", 25),
-    staleTime: 10 * 60 * 1000,
+  const isSearching = debouncedSearch.trim().length > 1;
+  const query = isSearching ? debouncedSearch : CHIPS[activeChip].q;
+
+  const { data, isLoading } = useQuery<{ videos: YtVideo[] }>({
+    queryKey: ["yt-home", query],
+    queryFn: () =>
+      fetch(`/api/yt/videos?q=${encodeURIComponent(query)}&limit=24`).then((r) => r.json()),
+    staleTime: 5 * 60 * 1000,
+    retry: false,
   });
 
-  const { data: searchResults = [], isFetching: searching } = useQuery<Track[]>({
-    queryKey: ["music-search", debouncedQuery],
-    queryFn: () => searchTracks(debouncedQuery, 20),
-    enabled: debouncedQuery.trim().length > 1,
-    staleTime: 2 * 60 * 1000,
-  });
-
-  const featuredTrack = hotTracks[0] ?? null;
-
-  const isSearching = debouncedQuery.trim().length > 1;
+  const videos = data?.videos ?? [];
 
   return (
-    <div
-      style={{
-        minHeight: "100vh",
-        background: "#05050c",
-        backgroundImage: "radial-gradient(circle at 50% 0%, rgba(127,119,221,0.05) 0%, transparent 50%)",
-        padding: "40px 48px",
-        paddingBottom: "40px",
-        fontFamily: "'DM Sans', sans-serif",
-      }}
-    >
-      {/* Header */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 48 }}>
-        <motion.h1 
-          initial={{ opacity: 0, x: -20 }}
-          animate={{ opacity: 1, x: 0 }}
-          style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 42, color: "#fff", letterSpacing: "0.06em", textShadow: "0 2px 10px rgba(0,0,0,0.5)" }}
-        >
+    <div style={{ minHeight: "100vh", background: "#0f0f0f", fontFamily: "'DM Sans', sans-serif", color: "#fff" }}>
+
+      {/* Sticky top bar */}
+      <div style={{
+        position: "sticky", top: 0, zIndex: 100,
+        background: "rgba(15,15,15,0.96)",
+        backdropFilter: "blur(14px)",
+        borderBottom: "1px solid rgba(255,255,255,0.05)",
+        padding: "10px 24px",
+        display: "flex", alignItems: "center", gap: 24,
+      }}>
+        <span style={{
+          fontFamily: "'Bebas Neue', sans-serif",
+          fontSize: 28, letterSpacing: "0.04em", flexShrink: 0,
+        }}>
           ho<span style={{ color: "#7F77DD" }}>o</span>dMusic
-        </motion.h1>
-        <motion.div
-          initial={{ opacity: 0, x: 20 }}
-          animate={{ opacity: 1, x: 0 }}
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 12,
-            background: "rgba(255,255,255,0.03)",
-            border: "1px solid rgba(255,255,255,0.1)",
-            borderRadius: 16,
-            padding: "12px 20px",
-            width: 320,
-            backdropFilter: "blur(12px)",
-            boxShadow: "0 8px 32px rgba(0,0,0,0.2)",
-            transition: "border-color 0.2s",
-          }}
-          className="focus-within:border-[#7F77DD]"
-        >
-          <Search size={18} color="#888" />
+        </span>
+
+        <div style={{
+          flex: 1, maxWidth: 600, margin: "0 auto",
+          display: "flex", alignItems: "center",
+          background: "rgba(255,255,255,0.05)",
+          border: "1px solid rgba(255,255,255,0.1)",
+          borderRadius: 24, padding: "8px 18px", gap: 10,
+        }}>
+          <Search size={15} color="#888" />
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search artists, songs, albums…"
+            placeholder="Search"
             style={{
-              background: "none", border: "none", outline: "none",
-              color: "#fff", fontSize: 14, flex: 1,
-              fontFamily: "'DM Sans', sans-serif",
+              flex: 1, background: "none", border: "none", outline: "none",
+              color: "#fff", fontSize: 14, fontFamily: "'DM Sans', sans-serif",
             }}
           />
-        </motion.div>
+        </div>
+
+        <div style={{ width: 120, flexShrink: 0 }} />
       </div>
 
-      {/* Search results */}
-      {isSearching ? (
-        <motion.div initial="hidden" animate="show" variants={containerVariants}>
-          <div style={{ fontSize: 15, fontWeight: 600, color: "#aaa", marginBottom: 24, letterSpacing: "0.02em" }}>
-            {searching ? "Searching the vaults…" : `Results for "${debouncedQuery}"`}
-          </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {searchResults.map((t, i) => (
-              <motion.div key={t.trackId} variants={itemVariants}>
-                <TrackRow track={t} index={i} queue={searchResults} showArt />
-              </motion.div>
-            ))}
-          </div>
-        </motion.div>
-      ) : (
-        <>
-          {/* Hero */}
-          {featuredTrack && <HeroTrack track={featuredTrack} queue={hotTracks} />}
-
-          {/* Top Tracks */}
-          <Section title="Late Night Rotation">
-            <motion.div 
-              variants={containerVariants}
-              initial="hidden"
-              whileInView="show"
-              viewport={{ once: true, margin: "-100px" }}
-              style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px 48px" }}
+      {/* Filter chips */}
+      {!isSearching && (
+        <div style={{
+          display: "flex", gap: 8, padding: "12px 24px",
+          overflowX: "auto", scrollbarWidth: "none",
+          borderBottom: "1px solid rgba(255,255,255,0.04)",
+        }}>
+          <style>{`.chip-row::-webkit-scrollbar{display:none}`}</style>
+          {CHIPS.map((chip, i) => (
+            <button
+              key={chip.label}
+              onClick={() => setActiveChip(i)}
+              style={{
+                flexShrink: 0, padding: "6px 14px", borderRadius: 8,
+                cursor: "pointer", border: "none",
+                fontFamily: "'DM Sans', sans-serif", fontSize: 13, fontWeight: 600,
+                background: activeChip === i ? "#fff" : "rgba(255,255,255,0.1)",
+                color: activeChip === i ? "#0f0f0f" : "#fff",
+                transition: "background 0.18s, color 0.18s",
+              }}
             >
-              {hotTracks.slice(0, 16).map((t, i) => (
-                <motion.div key={t.trackId} variants={itemVariants}>
-                  <TrackRow track={t} index={i} queue={hotTracks} showArt />
-                </motion.div>
-              ))}
-            </motion.div>
-          </Section>
-
-          {/* Music Videos */}
-          <MusicVideosPreview />
-
-          {/* Genres */}
-          <Section title="Mood & Sound">
-            <motion.div 
-              variants={containerVariants}
-              initial="hidden"
-              whileInView="show"
-              viewport={{ once: true }}
-              style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 20 }}
-            >
-              {GENRES.map((g) => (
-                <motion.div key={g.label} variants={itemVariants}>
-                  <motion.div
-                    whileHover={{ scale: 1.03, y: -4 }}
-                    whileTap={{ scale: 0.97 }}
-                    onClick={() => navigate(`/music/genre/${encodeURIComponent(g.query)}?label=${encodeURIComponent(g.label)}`)}
-                    style={{
-                      padding: "32px 24px",
-                      borderRadius: 16,
-                      background: `linear-gradient(135deg, ${g.color}33, ${g.color}11)`,
-                      border: `1px solid ${g.color}44`,
-                      cursor: "pointer",
-                      position: "relative",
-                      overflow: "hidden",
-                      boxShadow: "0 8px 24px rgba(0,0,0,0.2)",
-                    }}
-                    className="group"
-                  >
-                    <div style={{ position: "relative", zIndex: 2, fontSize: 22, fontWeight: 700, color: "#fff", letterSpacing: "0.02em", textShadow: "0 2px 4px rgba(0,0,0,0.5)" }}>{g.label}</div>
-                    <motion.div
-                      style={{
-                        position: "absolute",
-                        bottom: -20,
-                        right: -20,
-                        width: 120,
-                        height: 120,
-                        borderRadius: 16,
-                        background: `linear-gradient(135deg, ${g.color}66, transparent)`,
-                        transform: "rotate(15deg)",
-                        zIndex: 1,
-                        transition: "transform 0.4s ease",
-                      }}
-                      className="group-hover:rotate-0 group-hover:scale-110"
-                    />
-                  </motion.div>
-                </motion.div>
-              ))}
-            </motion.div>
-          </Section>
-
-        </>
+              {chip.label}
+            </button>
+          ))}
+        </div>
       )}
+
+      {/* Video grid */}
+      <div style={{ padding: "24px" }}>
+        {isLoading ? (
+          <SkeletonGrid />
+        ) : videos.length === 0 ? (
+          <div style={{ textAlign: "center", color: "#555", paddingTop: 80, fontSize: 15 }}>
+            No videos found
+          </div>
+        ) : (
+          <motion.div
+            key={query}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.25 }}
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))",
+              gap: "32px 20px",
+            }}
+          >
+            {videos.map((v) => (
+              <VideoCard
+                key={v.id}
+                video={v}
+                onClick={() => navigate(`/music/videos/${v.id}`)}
+              />
+            ))}
+          </motion.div>
+        )}
+      </div>
     </div>
   );
 }
