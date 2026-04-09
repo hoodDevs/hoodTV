@@ -72,32 +72,57 @@ export function MediaCard({ item, className = "", size = "md", fill = false, pro
             </div>
           )}
 
-          {/* Hover overlay */}
+          {/* Hover overlay — play button + overview */}
           <div
-            className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center"
-            style={{ background: "linear-gradient(to top, rgba(0,0,0,.9) 0%, transparent 50%)" }}
+            className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col justify-between"
+            style={{ background: "linear-gradient(to top, rgba(0,0,0,.97) 0%, rgba(0,0,0,0.55) 45%, rgba(0,0,0,0.1) 100%)" }}
           >
-            <button
-              onClick={(e) => { e.preventDefault(); e.stopPropagation(); setLocation(watchUrl); }}
-              data-testid={`card-play-${item.id}`}
-              style={{
-                width: "44px",
-                height: "44px",
-                background: "#7F77DD",
-                borderRadius: "50%",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                border: "none",
-                cursor: "pointer",
-                transform: "scale(0.7)",
-                transition: "transform 0.3s cubic-bezier(.22,1,.36,1)",
-              }}
-              className="group-hover:!scale-100"
-              title="Play"
-            >
-              <Play size={16} fill="white" className="ml-0.5" />
-            </button>
+            {/* Play button — upper-center */}
+            <div className="flex-1 flex items-center justify-center">
+              <button
+                onClick={(e) => { e.preventDefault(); e.stopPropagation(); setLocation(watchUrl); }}
+                data-testid={`card-play-${item.id}`}
+                style={{
+                  width: "42px",
+                  height: "42px",
+                  background: "#7F77DD",
+                  borderRadius: "50%",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  border: "none",
+                  cursor: "pointer",
+                  transform: "scale(0.75)",
+                  transition: "transform 0.3s cubic-bezier(.22,1,.36,1), background 0.2s",
+                  flexShrink: 0,
+                  boxShadow: "0 4px 16px rgba(127,119,221,0.5)",
+                }}
+                className="group-hover:!scale-100 hover:!bg-[#9590e8]"
+                title="Play"
+              >
+                <Play size={15} fill="white" className="ml-0.5" />
+              </button>
+            </div>
+
+            {/* Overview text — bottom */}
+            {item.overview && (
+              <p
+                style={{
+                  padding: "0 9px 10px",
+                  fontSize: "9.5px",
+                  lineHeight: 1.5,
+                  color: "rgba(255,255,255,0.72)",
+                  display: "-webkit-box",
+                  WebkitLineClamp: 3,
+                  WebkitBoxOrient: "vertical",
+                  overflow: "hidden",
+                  fontFamily: "'DM Sans', sans-serif",
+                  letterSpacing: "0.01em",
+                }}
+              >
+                {item.overview}
+              </p>
+            )}
           </div>
 
           {/* Rating badge (top right, shown on hover) */}
@@ -140,6 +165,7 @@ export function MediaCard({ item, className = "", size = "md", fill = false, pro
               alignItems: "center",
               justifyContent: "center",
               color: inList ? "#7F77DD" : "#f0f0f0",
+              backdropFilter: "blur(4px)",
             }}
             title={inList ? "Remove from list" : "Add to list"}
           >
@@ -162,8 +188,8 @@ export function MediaCard({ item, className = "", size = "md", fill = false, pro
           <p
             style={{
               fontSize: "13px",
-              fontWeight: 400,
-              color: "#f0f0f0",
+              fontWeight: 500,
+              color: "#e8e8e8",
               whiteSpace: "nowrap",
               overflow: "hidden",
               textOverflow: "ellipsis",
@@ -174,22 +200,26 @@ export function MediaCard({ item, className = "", size = "md", fill = false, pro
           </p>
           <div style={{ display: "flex", alignItems: "center", gap: "7px", fontSize: "11px", color: "#555" }}>
             {(item.releaseDate || item.year) && (
-              <span style={{ color: item.releaseDate && smartReleaseLabel(item.releaseDate).startsWith("Coming") ? "#7F77DD" : "#555" }}>
+              <span style={{ color: item.releaseDate && smartReleaseLabel(item.releaseDate).startsWith("Coming") ? "#7F77DD" : "#666" }}>
                 {smartReleaseLabel(item.releaseDate) || item.year}
               </span>
             )}
             {(item.releaseDate || item.year) && genre && (
-              <span style={{ width: "2px", height: "2px", borderRadius: "50%", background: "#555" }} />
+              <span style={{ width: "2px", height: "2px", borderRadius: "50%", background: "#444" }} />
             )}
             {genre && (
               <span
                 style={{
                   fontSize: "10px",
                   color: "#7F77DD",
-                  background: "rgba(127,119,221,0.15)",
+                  background: "rgba(127,119,221,0.12)",
                   padding: "1px 6px",
                   borderRadius: "3px",
-                  border: "0.5px solid rgba(127,119,221,0.35)",
+                  border: "0.5px solid rgba(127,119,221,0.28)",
+                  whiteSpace: "nowrap",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  maxWidth: "90px",
                 }}
               >
                 {genre}

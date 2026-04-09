@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { MediaCard } from "@/components/MediaCard";
 import { Skeleton } from "@/components/ui/skeleton";
-import { getMovies, getTVShows, getTMDBMovieGenres, getTMDBTVGenres } from "@/lib/api";
+import { getMovies, getTVShows, getMoviesByGenre, getTVByGenre, getTMDBMovieGenres, getTMDBTVGenres } from "@/lib/api";
 import type { MediaItem } from "@/lib/api";
 import { Film, Tv, SlidersHorizontal } from "lucide-react";
 
@@ -26,14 +26,21 @@ export default function BrowsePage({ type }: BrowsePageProps) {
 
   useEffect(() => {
     setSelectedGenre(null);
+    const sp = new URLSearchParams(window.location.search);
+    const g = sp.get("genre");
+    if (g) setSelectedGenre(Number(g));
   }, [type]);
 
   useEffect(() => {
     setLoading(true);
     setItems([]);
     setPage(1);
-    const fetcher = type === "movies" ? getMovies : getTVShows;
-    fetcher(1, selectedGenre ?? undefined).then((data) => {
+
+    const fetchCall = selectedGenre
+      ? (type === "movies" ? getMoviesByGenre(selectedGenre) : getTVByGenre(selectedGenre))
+      : (type === "movies" ? getMovies(1) : getTVShows(1));
+
+    fetchCall.then((data) => {
       setItems(data);
       setLoading(false);
       setHasMore(data.length >= 18);
@@ -41,10 +48,11 @@ export default function BrowsePage({ type }: BrowsePageProps) {
   }, [type, selectedGenre]);
 
   const loadMore = async () => {
+    if (selectedGenre) return;
     setLoadingMore(true);
     const nextPage = page + 1;
     const fetcher = type === "movies" ? getMovies : getTVShows;
-    const data = await fetcher(nextPage, selectedGenre ?? undefined);
+    const data = await fetcher(nextPage);
     setItems((prev) => [...prev, ...data]);
     setPage(nextPage);
     setLoadingMore(false);
@@ -66,7 +74,7 @@ export default function BrowsePage({ type }: BrowsePageProps) {
       <div
         style={{
           paddingTop: "48px",
-          paddingBottom: "40px",
+          paddingBottom: "36px",
           paddingLeft: "40px",
           paddingRight: "40px",
           borderBottom: "1px solid rgba(255,255,255,0.05)",
@@ -90,34 +98,36 @@ export default function BrowsePage({ type }: BrowsePageProps) {
             >
               {isMovies ? <Film size={18} /> : <Tv size={18} />}
             </div>
-            <h1
-              style={{
-                fontFamily: "'Bebas Neue', sans-serif",
-                fontSize: "42px",
-                letterSpacing: "3px",
-                color: "#fff",
-                lineHeight: 1,
-              }}
-            >
-              {isMovies ? "Movies" : "TV Shows"}
-            </h1>
+            <div>
+              <h1
+                style={{
+                  fontFamily: "'Bebas Neue', sans-serif",
+                  fontSize: "42px",
+                  letterSpacing: "3px",
+                  color: "#fff",
+                  lineHeight: 1,
+                }}
+              >
+                {isMovies ? "Movies" : "TV Shows"}
+              </h1>
+              <p style={{ fontSize: "12px", color: "#555", marginTop: "3px" }}>
+                {isMovies
+                  ? "Browse thousands of movies across all genres"
+                  : "Discover the best TV series and binge-worthy shows"}
+              </p>
+            </div>
           </div>
-          <p style={{ fontSize: "13px", color: "#666", marginLeft: "54px" }}>
-            {isMovies
-              ? "Browse thousands of movies across all genres"
-              : "Discover the best TV series and binge-worthy shows"}
-          </p>
         </div>
       </div>
 
       {/* Filters */}
       <div
         style={{
-          padding: "20px 40px",
+          padding: "16px 40px",
           borderBottom: "1px solid rgba(255,255,255,0.04)",
           background: "#0a0a0a",
           position: "sticky",
-          top: "68px",
+          top: 0,
           zIndex: 30,
         }}
       >
@@ -128,13 +138,12 @@ export default function BrowsePage({ type }: BrowsePageProps) {
             display: "flex",
             alignItems: "center",
             gap: "16px",
-            flexWrap: "wrap",
           }}
         >
-          {/* Genre pills */}
+          {/* Genre pills — scrollable */}
           <div
             className="scrollbar-hide flex items-center gap-2"
-            style={{ flex: 1, overflowX: "auto", minWidth: 0 }}
+            style={{ flex: 1, overflowX: "auto", minWidth: 0, paddingRight: "8px" }}
           >
             <button
               onClick={() => setSelectedGenre(null)}
@@ -200,6 +209,8 @@ export default function BrowsePage({ type }: BrowsePageProps) {
                 </button>
               );
             })}
+            {/* spacer so last chip has breathing room */}
+            <div style={{ flexShrink: 0, width: "24px" }} />
           </div>
 
           {/* Sort controls */}
@@ -249,6 +260,36 @@ export default function BrowsePage({ type }: BrowsePageProps) {
 
       {/* Grid */}
       <div style={{ padding: "32px 40px 60px", maxWidth: "1400px", margin: "0 auto" }}>
+        {/* Active genre label */}
+        {selectedGenre && genres.length > 0 && (
+          <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "20px" }}>
+            <p style={{ fontSize: "12px", color: "#666" }}>
+              Showing{" "}
+              <span style={{ color: "#9D97E8", fontWeight: 500 }}>
+                {genres.find((g) => g.id === selectedGenre)?.name}
+              </span>
+              {" "}— {filteredAndSorted.length} title{filteredAndSorted.length !== 1 ? "s" : ""}
+            </p>
+            <button
+              onClick={() => setSelectedGenre(null)}
+              style={{
+                fontSize: "10px",
+                color: "#666",
+                background: "rgba(255,255,255,0.05)",
+                border: "1px solid rgba(255,255,255,0.08)",
+                borderRadius: "4px",
+                padding: "2px 8px",
+                cursor: "pointer",
+                transition: "color 0.2s",
+              }}
+              onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.color = "#f0f0f0"; }}
+              onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = "#666"; }}
+            >
+              Clear
+            </button>
+          </div>
+        )}
+
         {loading ? (
           <div
             style={{
@@ -273,7 +314,7 @@ export default function BrowsePage({ type }: BrowsePageProps) {
               color: "#555",
             }}
           >
-            <div style={{ fontSize: "48px", marginBottom: "12px" }}>🎬</div>
+            <div style={{ fontSize: "48px", marginBottom: "12px" }}>{isMovies ? "🎬" : "📺"}</div>
             <p style={{ fontSize: "16px", fontWeight: 500, color: "#777" }}>No titles found</p>
             <p style={{ fontSize: "13px", marginTop: "6px" }}>Try a different genre or filter</p>
           </div>
@@ -291,7 +332,7 @@ export default function BrowsePage({ type }: BrowsePageProps) {
               ))}
             </div>
 
-            {hasMore && (
+            {hasMore && !selectedGenre && (
               <div style={{ display: "flex", justifyContent: "center", marginTop: "40px" }}>
                 <button
                   onClick={loadMore}

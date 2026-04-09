@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Link } from "wouter";
 import { HeroSection } from "@/components/HeroSection";
 import { ContentRow } from "@/components/ContentRow";
 import { SpotlightSection } from "@/components/SpotlightSection";
@@ -17,6 +18,19 @@ import {
 } from "@/lib/api";
 import { useContinueWatching } from "@/hooks/useContinueWatching";
 import type { MediaItem } from "@/lib/api";
+
+const GENRE_TILES = [
+  { label: "Action",      id: 28,    emoji: "⚡", from: "#3a0a0a", to: "#7a1a1a", accent: "#e05555" },
+  { label: "Comedy",      id: 35,    emoji: "😄", from: "#2a1e00", to: "#5a4000", accent: "#e0a820" },
+  { label: "Sci-Fi",      id: 878,   emoji: "🚀", from: "#0a1a3a", to: "#1a3a6a", accent: "#5588e0" },
+  { label: "Horror",      id: 27,    emoji: "💀", from: "#1a0a00", to: "#3a1a00", accent: "#c04830" },
+  { label: "Romance",     id: 10749, emoji: "💕", from: "#2a0a1a", to: "#5a1a3a", accent: "#e060a0" },
+  { label: "Animation",   id: 16,    emoji: "🎨", from: "#0a2a0a", to: "#1a5a1a", accent: "#50c050" },
+  { label: "Crime",       id: 80,    emoji: "🔍", from: "#0f0f18", to: "#1e1e30", accent: "#7070b0" },
+  { label: "Drama",       id: 18,    emoji: "🎭", from: "#1a1200", to: "#3a2800", accent: "#c08840" },
+  { label: "Thriller",    id: 53,    emoji: "🔪", from: "#18001a", to: "#380038", accent: "#9040c0" },
+  { label: "Documentary", id: 99,    emoji: "📹", from: "#001a1a", to: "#003838", accent: "#40b0b0" },
+];
 
 export default function HomePage() {
   const [trending, setTrending] = useState<MediaItem[]>([]);
@@ -50,15 +64,12 @@ export default function HomePage() {
   const { continueWatching } = useContinueWatching();
 
   useEffect(() => {
-    // Priority 1 — hero + above fold
     getTrending().then((d) => { setTrending(d); setLoadingTrending(false); });
     getNewReleases().then((d) => { setNewReleases(d); setLoadingNew(false); });
 
-    // Priority 2 — first rows
     getMovies(1).then((d) => { setMovies(d); setLoadingMovies(false); });
     getTVShows(1).then((d) => { setTVShows(d); setLoadingTV(false); });
 
-    // Priority 3 — genre / themed rows (staggered slightly so we don't hammer TMDB)
     getTopRatedMovies().then((d) => { setTopMovies(d); setLoadingTopMovies(false); });
     getTopRatedTV().then((d) => { setTopTV(d); setLoadingTopTV(false); });
 
@@ -103,6 +114,83 @@ export default function HomePage() {
           {/* Trending */}
           <ContentRow title="Trending Now" items={trending} loading={loadingTrending} accent seeAllHref="/trending" />
 
+          {/* Browse by Genre tiles */}
+          <div style={{ padding: "4px 0 40px" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "11px", padding: "0 40px", marginBottom: "16px" }}>
+              <div style={{ width: "3px", height: "20px", background: "#7F77DD", borderRadius: "2px" }} />
+              <h2
+                style={{
+                  fontFamily: "'Bebas Neue', sans-serif",
+                  fontSize: "21px",
+                  letterSpacing: "2px",
+                  color: "#fff",
+                }}
+              >
+                Browse by Genre
+              </h2>
+            </div>
+            <div
+              className="scrollbar-hide"
+              style={{
+                display: "flex",
+                gap: "10px",
+                overflowX: "auto",
+                padding: "4px 40px 8px",
+              }}
+            >
+              {GENRE_TILES.map((g) => (
+                <Link key={g.id} href={`/movies?genre=${g.id}`}>
+                  <div
+                    style={{
+                      flexShrink: 0,
+                      width: "128px",
+                      height: "72px",
+                      borderRadius: "10px",
+                      background: `linear-gradient(135deg, ${g.from} 0%, ${g.to} 100%)`,
+                      border: `1px solid ${g.accent}28`,
+                      display: "flex",
+                      flexDirection: "column",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      gap: "6px",
+                      cursor: "pointer",
+                      transition: "transform 0.2s cubic-bezier(.22,1,.36,1), box-shadow 0.2s, border-color 0.2s",
+                      textDecoration: "none",
+                      position: "relative",
+                      overflow: "hidden",
+                    }}
+                    onMouseEnter={(e) => {
+                      const el = e.currentTarget as HTMLElement;
+                      el.style.transform = "scale(1.05) translateY(-2px)";
+                      el.style.boxShadow = `0 12px 32px rgba(0,0,0,0.5), 0 0 0 1px ${g.accent}55`;
+                      el.style.borderColor = `${g.accent}55`;
+                    }}
+                    onMouseLeave={(e) => {
+                      const el = e.currentTarget as HTMLElement;
+                      el.style.transform = "scale(1) translateY(0)";
+                      el.style.boxShadow = "none";
+                      el.style.borderColor = `${g.accent}28`;
+                    }}
+                  >
+                    <span style={{ fontSize: "22px", lineHeight: 1 }}>{g.emoji}</span>
+                    <span
+                      style={{
+                        fontFamily: "'Bebas Neue', sans-serif",
+                        fontSize: "13px",
+                        letterSpacing: "1.5px",
+                        color: g.accent,
+                        lineHeight: 1,
+                      }}
+                    >
+                      {g.label}
+                    </span>
+                  </div>
+                </Link>
+              ))}
+              <div style={{ flexShrink: 0, width: "24px" }} />
+            </div>
+          </div>
+
           {/* Spotlight — scrollable landscape cinema row */}
           {newReleases.length >= 2 && (
             <SpotlightSection items={newReleases} title="Now In Cinemas" />
@@ -119,7 +207,7 @@ export default function HomePage() {
           {/* Action */}
           <ContentRow title="Action & Adventure" items={actionMovies} loading={loadingAction} />
 
-          {/* Crime drama TV — feels different after two movie rows */}
+          {/* Crime drama TV */}
           <ContentRow title="Crime & Thriller Series" items={crimeTV} loading={loadingCrime} />
 
           {/* Sci-Fi */}
@@ -138,7 +226,6 @@ export default function HomePage() {
           <ContentRow title="Coming Soon" items={upcoming} loading={loadingUpcoming} />
 
         </div>
-
       </main>
 
       {/* Footer */}

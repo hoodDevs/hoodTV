@@ -9,6 +9,9 @@ export function Navbar() {
   const [searchQuery, setSearchQuery] = useState("");
   const [location, setLocation] = useLocation();
 
+  const isMac = typeof navigator !== "undefined" && /Mac|iPod|iPhone|iPad/.test(navigator.platform);
+  const shortcutLabel = isMac ? "⌘K" : "^K";
+
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") setSearchOpen(false);
@@ -109,14 +112,29 @@ export function Navbar() {
                     style={{ flexShrink: 0, color: isActive ? "#9D97E8" : "#555" }}
                   />
                   {label}
+                  {isActive && (
+                    <div
+                      style={{
+                        marginLeft: "auto",
+                        width: "4px",
+                        height: "4px",
+                        borderRadius: "50%",
+                        background: "#7F77DD",
+                        flexShrink: 0,
+                      }}
+                    />
+                  )}
                 </div>
               </Link>
             );
           })}
         </div>
 
+        {/* Divider */}
+        <div style={{ margin: "0 16px", height: "1px", background: "rgba(255,255,255,0.05)" }} />
+
         {/* Bottom actions */}
-        <div style={{ padding: "16px 12px 28px", display: "flex", flexDirection: "column", gap: "4px" }}>
+        <div style={{ padding: "14px 12px 24px", display: "flex", flexDirection: "column", gap: "4px" }}>
           <button
             onClick={() => setSearchOpen(true)}
             data-testid="nav-search"
@@ -140,41 +158,60 @@ export function Navbar() {
           >
             <Search size={17} strokeWidth={1.8} style={{ flexShrink: 0, color: "#555" }} />
             Search
+            <span
+              style={{
+                marginLeft: "auto",
+                fontSize: "10px",
+                color: "#3d3d4f",
+                background: "rgba(255,255,255,0.04)",
+                border: "1px solid rgba(255,255,255,0.07)",
+                borderRadius: "4px",
+                padding: "1px 5px",
+                letterSpacing: "0.04em",
+                fontFamily: "monospace",
+                flexShrink: 0,
+              }}
+            >
+              {shortcutLabel}
+            </span>
           </button>
 
+          {/* Profile */}
           <div
             style={{
               display: "flex",
               alignItems: "center",
-              gap: "12px",
+              gap: "11px",
               padding: "10px 14px",
               borderRadius: "10px",
               cursor: "pointer",
-              color: "#666",
-              fontSize: "13.5px",
-              fontWeight: 400,
-              letterSpacing: "0.02em",
+              transition: "background 0.18s",
             }}
+            className="sidebar-link"
           >
             <div
               style={{
-                width: "26px",
-                height: "26px",
-                borderRadius: "7px",
-                background: "rgba(127,119,221,0.15)",
-                border: "1.5px solid #7F77DD",
+                width: "28px",
+                height: "28px",
+                borderRadius: "8px",
+                background: "linear-gradient(135deg, rgba(127,119,221,0.3) 0%, rgba(157,151,232,0.15) 100%)",
+                border: "1.5px solid rgba(127,119,221,0.5)",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
                 fontSize: "11px",
-                fontWeight: 600,
+                fontWeight: 700,
                 color: "#9D97E8",
                 flexShrink: 0,
+                fontFamily: "'DM Sans', sans-serif",
+                letterSpacing: "0.03em",
               }}
             >
               HT
             </div>
-            Profile
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <p style={{ fontSize: "13px", color: "#888", fontWeight: 400, lineHeight: 1.2 }}>Profile</p>
+            </div>
           </div>
         </div>
       </nav>
@@ -236,7 +273,7 @@ export function Navbar() {
               </button>
             </div>
           </form>
-          <p style={{ fontSize: "12px", color: "#555", marginTop: "14px", letterSpacing: "0.04em" }}>
+          <p style={{ fontSize: "12px", color: "#444", marginTop: "14px", letterSpacing: "0.04em" }}>
             Try "Black Panther", "Action", "2024" · Press Enter to search
           </p>
         </div>
