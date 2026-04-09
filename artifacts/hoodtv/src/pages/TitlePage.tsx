@@ -67,10 +67,13 @@ export default function TitlePage() {
 
   const inWatchlist = isInWatchlist(details.id);
 
+  const yearStr = details.year || (details.releaseDate ? details.releaseDate.substring(0, 4) : "");
+  const totalSeasonsStr = details.seasons?.length ? String(details.seasons.length) : "1";
+
   const watchUrl =
     details.type === "tv"
-      ? `/watch/${details.id}?title=${encodeURIComponent(details.title)}&type=tv&season=${selectedSeason}&episode=1`
-      : `/watch/${details.id}?title=${encodeURIComponent(details.title)}&type=movie`;
+      ? `/watch/${details.id}?title=${encodeURIComponent(details.title)}&type=tv&season=${selectedSeason}&episode=1&year=${yearStr}&total_seasons=${totalSeasonsStr}`
+      : `/watch/${details.id}?title=${encodeURIComponent(details.title)}&type=movie&year=${yearStr}`;
 
   return (
     <div className="min-h-screen" style={{ backgroundColor: "#0a0a0a", color: "#f0f0f0" }} data-testid="title-page">
@@ -569,7 +572,7 @@ export default function TitlePage() {
                     className="group"
                     onClick={() =>
                       setLocation(
-                        `/watch/${details.id}?title=${encodeURIComponent(details.title)}&type=${details.type}&season=${selectedSeason}&episode=${ep.episode_number}`
+                        `/watch/${details.id}?title=${encodeURIComponent(details.title)}&type=${details.type}&season=${selectedSeason}&episode=${ep.episode_number}&year=${yearStr}&total_seasons=${totalSeasonsStr}`
                       )
                     }
                     style={{

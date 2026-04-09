@@ -8,6 +8,7 @@ from pathlib import Path
 from fastapi import APIRouter, Query
 from pydantic import BaseModel
 from typing import List, Optional
+from curl_cffi import requests as cffi_requests
 
 router = APIRouter()
 
@@ -16,6 +17,16 @@ RUNNER = WASM_DIR / "runner.cjs"
 
 _cache: dict = {}
 _CACHE_TTL = 3600
+
+_UA = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+    "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+)
+_VIDEASY_HEADERS = {
+    "User-Agent": _UA,
+    "Referer": "https://player.videasy.net/",
+    "Origin": "https://player.videasy.net",
+}
 
 
 def _cache_key(tmdb_id: int, media_type: str, season: int = 0, episode: int = 0) -> str:
@@ -74,6 +85,19 @@ def _run_videasy(
         return None
 
 
+async def _check_url_reachable(url: str, timeout_s: float = 5.0) -> bool:
+    """Quick HEAD check to verify the CDN URL is reachable from this server."""
+    try:
+        async with cffi_requests.AsyncSession(impersonate="chrome131") as sess:
+            resp = await asyncio.wait_for(
+                sess.head(url, headers=_VIDEASY_HEADERS, timeout=int(timeout_s)),
+                timeout=timeout_s + 1,
+            )
+            return resp.status_code < 500
+    except Exception:
+        return False
+
+
 class Caption(BaseModel):
     language: str
     url: str
@@ -90,8 +114,47 @@ class StreamResponse(BaseModel):
     sources: List[StreamSource]
 
 
-def _build_sources(result: dict) -> List[StreamSource]:
-    sources_out = []
+def quality_rank(q: str) -> int:
+    q = str(q).lower()
+    if "1080" in q:
+        return 0
+    if "720" in q:
+        return 1
+    if "480" in q:
+        return 2
+    if "360" in q:
+        return 3
+    return 4
+
+
+def quality_label(q: str) -> str:
+    q = str(q).lower()
+    if "1080" in q:
+        return "1080p"
+    if "720" in q:
+        return "720p"
+    if "480" in q:
+        return "480p"
+    if "360" in q:
+        return "360p"
+    return "Auto"
+
+
+def _make_stream_source(src: dict, captions: List[Caption]) -> Optional[StreamSource]:
+    m3u8_url = src.get("url", "")
+    if not m3u8_url or ".m3u8" not in m3u8_url:
+        return None
+    proxied_url = f"/api/proxy/hls?url={urllib.parse.quote(m3u8_url, safe='')}"
+    qlabel = quality_label(src.get("quality", ""))
+    return StreamSource(
+        name=qlabel,
+        url=proxied_url,
+        source_type="hls",
+        captions=captions,
+    )
+
+
+async def _build_sources(result: dict) -> List[StreamSource]:
     subtitles = result.get("subtitles", [])
     captions = []
     for sub in subtitles:
@@ -101,33 +164,28 @@ def _build_sources(result: dict) -> List[StreamSource]:
             captions.append(Caption(language=lang, url=url))
 
     raw_sources = result.get("sources", [])
-    # Pick best quality first (1080p > 720p > others)
-    def quality_rank(q: str) -> int:
-        q = q.lower()
-        if "1080" in q: return 0
-        if "720" in q: return 1
-        if "480" in q: return 2
-        if "360" in q: return 3
-        return 4
-
     sorted_sources = sorted(raw_sources, key=lambda s: quality_rank(s.get("quality", "")))
 
-    for src in sorted_sources:
+    async def _check_and_build(src):
         m3u8_url = src.get("url", "")
         if not m3u8_url or ".m3u8" not in m3u8_url:
-            continue
-        proxied_url = f"/api/proxy/hls?url={urllib.parse.quote(m3u8_url, safe='')}"
-        quality = src.get("quality", "Auto")
-        sources_out.append(
-            StreamSource(
-                name=f"Videasy {quality}",
-                url=proxied_url,
-                source_type="hls",
-                captions=captions,
-            )
-        )
+            return None
+        reachable = await _check_url_reachable(m3u8_url)
+        if not reachable:
+            return None
+        return _make_stream_source(src, captions)
 
-    return sources_out
+    tasks = [_check_and_build(src) for src in sorted_sources]
+    check_results = await asyncio.gather(*tasks)
+    valid_sources = [r for r in check_results if r is not None]
+
+    if valid_sources:
+        return valid_sources
+
+    # Fallback: if all CDN checks fail (e.g. server-side CDN restrictions),
+    # include sources unvalidated so the player can attempt them directly.
+    fallback = [_make_stream_source(s, captions) for s in sorted_sources]
+    return [s for s in fallback if s is not None]
 
 
 @router.get("/stream/movie/{tmdb_id}/videasy", response_model=StreamResponse)
@@ -146,7 +204,7 @@ async def get_movie_videasy(
         None,
         lambda: _run_videasy(tmdb_id, "movie", title=title, year=year, imdb_id=imdb_id),
     )
-    sources = _build_sources(result) if result else []
+    sources = await _build_sources(result) if result else []
     response = StreamResponse(sources=sources)
     if sources:
         _set_cache(key, response)
@@ -175,7 +233,7 @@ async def get_tv_videasy(
             title=title, year=year, imdb_id=imdb_id, total_seasons=total_seasons
         ),
     )
-    sources = _build_sources(result) if result else []
+    sources = await _build_sources(result) if result else []
     response = StreamResponse(sources=sources)
     if sources:
         _set_cache(key, response)

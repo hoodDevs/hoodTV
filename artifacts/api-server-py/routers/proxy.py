@@ -14,9 +14,11 @@ UA = (
 )
 
 _REFERER_MAP = {
-    "vidplus.dev": ("https://player.videasy.net/", "https://player.videasy.net"),
-    "videasy.net": ("https://player.videasy.net/", "https://player.videasy.net"),
-    "megafiles.store": ("https://player.videasy.net/", "https://player.videasy.net"),
+    "vidplus.dev":                  ("https://player.videasy.net/", "https://player.videasy.net"),
+    "videasy.net":                  ("https://player.videasy.net/", "https://player.videasy.net"),
+    "megafiles.store":              ("https://player.videasy.net/", "https://player.videasy.net"),
+    "serversicuro.cc":              ("https://player.videasy.net/", "https://player.videasy.net"),
+    "uskevinpowell89.workers.dev":  ("https://player.videasy.net/", "https://player.videasy.net"),
 }
 
 def _get_headers(url: str) -> dict:

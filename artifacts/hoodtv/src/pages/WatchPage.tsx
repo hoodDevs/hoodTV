@@ -31,6 +31,8 @@ export default function WatchPage() {
   const season = searchParams.get("season") ? Number(searchParams.get("season")) : undefined;
   const episode = searchParams.get("episode") ? Number(searchParams.get("episode")) : undefined;
   const titleParam = searchParams.get("title") || "";
+  const yearParam = searchParams.get("year") || "";
+  const totalSeasonsParam = searchParams.get("total_seasons") || "1";
   const typeParam = (searchParams.get("type") as "movie" | "tv") || "movie";
 
   const title = details?.title || titleParam || "";
@@ -56,7 +58,7 @@ export default function WatchPage() {
       }
     });
 
-    getStreamSources(id, typeParam, season, episode, { title: titleParam })
+    getStreamSources(id, typeParam, season, episode, { title: titleParam, year: yearParam, totalSeasons: Number(totalSeasonsParam) })
       .then((srcs) => {
         if (!srcs || srcs.length === 0) {
           setErrorMsg("No stream found for this title.");
@@ -87,7 +89,7 @@ export default function WatchPage() {
   function retry() {
     setLoadState("loading");
     setErrorMsg("");
-    getStreamSources(id!, typeParam, season, episode, { title: titleParam })
+    getStreamSources(id!, typeParam, season, episode, { title: titleParam, year: yearParam, totalSeasons: Number(totalSeasonsParam) })
       .then((srcs) => {
         if (!srcs || srcs.length === 0) {
           setErrorMsg("No stream found. Please try again later.");
@@ -102,7 +104,7 @@ export default function WatchPage() {
 
   function goToEpisode(ep: number) {
     setLocation(
-      `/watch/${id}?title=${encodeURIComponent(titleParam)}&type=${typeParam}&season=${season ?? 1}&episode=${ep}`
+      `/watch/${id}?title=${encodeURIComponent(titleParam)}&type=${typeParam}&season=${season ?? 1}&episode=${ep}&year=${yearParam}&total_seasons=${totalSeasonsParam}`
     );
   }
 

@@ -338,9 +338,7 @@ export async function getStreamSources(
     throw new Error("Stream unavailable — no sources returned");
   }
 
-  const videasy720 = videasySources.filter(s => s.name.includes("720"));
-  const videasyOther = videasySources.filter(s => !s.name.includes("720"));
-  return [...videasy720, ...videasyOther];
+  return videasySources;
 }
 
 export async function getSeasonEpisodes(tmdbId: number, season: number): Promise<Episode[]> {

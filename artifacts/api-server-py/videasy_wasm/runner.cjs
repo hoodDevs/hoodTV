@@ -18,7 +18,9 @@ if (!tmdbId) {
 
 const CryptoJS = require(path.join(__dirname, 'node_modules', 'crypto-js'));
 
-function httpsGet(url, headers) {
+const PROVIDER_TIMEOUT_MS = 10000;
+
+function httpsGet(url) {
   return new Promise((resolve, reject) => {
     const opts = new URL(url);
     const req = https.request({
@@ -30,16 +32,25 @@ function httpsGet(url, headers) {
         'Accept': 'application/json, */*',
         'Origin': 'https://player.videasy.net',
         'Referer': 'https://player.videasy.net/',
-        ...headers,
       },
     }, (res) => {
       let data = '';
       res.on('data', chunk => data += chunk);
-      res.on('end', () => resolve({ status: res.statusCode, text: data, headers: res.headers }));
+      res.on('end', () => resolve({ status: res.statusCode, text: data }));
     });
     req.on('error', reject);
+    req.setTimeout(PROVIDER_TIMEOUT_MS, () => {
+      req.destroy(new Error('socket timeout'));
+    });
     req.end();
   });
+}
+
+function withTimeout(promise, ms) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), ms)),
+  ]);
 }
 
 async function initWasm() {
@@ -95,26 +106,53 @@ function decryptFinal(stage1) {
 }
 
 const PROVIDERS = [
-  'myflixerzupcloud',
-  'visioncine',
-  'hdmovie2',
-  'meine',
-  'overflix',
+  { name: 'myflixerzupcloud', base: 'https://api.videasy.net' },
+  { name: 'visioncine',       base: 'https://api.videasy.net' },
+  { name: 'meine',            base: 'https://api.videasy.net' },
+  { name: 'hdmovie2',         base: 'https://api.videasy.net' },
+  { name: 'overflix',         base: 'https://api2.videasy.net' },
 ];
 
-async function fetchSources(provider, params) {
-  const base = provider === 'overflix'
-    ? 'https://api2.videasy.net'
-    : 'https://api.videasy.net';
+async function tryProvider(wasm, provider, params) {
   const qs = new URLSearchParams(params).toString();
-  const url = `${base}/${provider}/sources-with-title?${qs}`;
+  const url = `${provider.base}/${provider.name}/sources-with-title?${qs}`;
+
+  let encrypted;
   try {
-    const resp = await httpsGet(url);
-    if (resp.status !== 200) return null;
-    return resp.text;
+    const resp = await withTimeout(httpsGet(url), PROVIDER_TIMEOUT_MS);
+    if (resp.status !== 200 || !resp.text) return null;
+    encrypted = resp.text.trim();
   } catch {
     return null;
   }
+
+  try {
+    const stage1 = wasmDecrypt(wasm, encrypted, Number(tmdbId));
+    if (!stage1) return null;
+    const json = decryptFinal(stage1);
+    if (!json) return null;
+    const parsed = JSON.parse(json);
+
+    const sources = (parsed.sources || []).filter(s => s.url && s.url.includes('.m3u8'));
+    if (sources.length === 0) return null;
+
+    return {
+      provider: provider.name,
+      sources: sources.map(s => ({ quality: s.quality || 'auto', url: s.url })),
+      subtitles: parsed.subtitles || [],
+    };
+  } catch {
+    return null;
+  }
+}
+
+function qualityRank(q) {
+  const s = String(q).toLowerCase();
+  if (s.includes('1080')) return 0;
+  if (s.includes('720'))  return 1;
+  if (s.includes('480'))  return 2;
+  if (s.includes('360'))  return 3;
+  return 4;
 }
 
 async function main() {
@@ -125,7 +163,7 @@ async function main() {
     mediaType: mediaType === 'tv' ? 'tv' : 'movie',
     year: year || '',
     totalSeasons: totalSeasons || '1',
-    tmdbId: tmdbId,
+    tmdbId,
     imdbId: imdbId || '',
   };
 
@@ -134,46 +172,39 @@ async function main() {
     params.episodeId = episode;
   }
 
-  let sources = [];
+  const results = await Promise.allSettled(
+    PROVIDERS.map(p => tryProvider(wasm, p, params))
+  );
+
+  const allSources = [];
+  const seenUrls = new Set();
   let subtitles = [];
 
-  for (const provider of PROVIDERS) {
-    const encrypted = await fetchSources(provider, params);
-    if (!encrypted) continue;
+  for (const result of results) {
+    if (result.status !== 'fulfilled' || !result.value) continue;
+    const { provider, sources, subtitles: subs } = result.value;
 
-    try {
-      const stage1 = wasmDecrypt(wasm, encrypted.trim(), Number(tmdbId));
-      if (!stage1) continue;
-      const json = decryptFinal(stage1);
-      if (!json) continue;
-      const parsed = JSON.parse(json);
+    if (subtitles.length === 0 && subs.length > 0) {
+      subtitles = subs;
+    }
 
-      if (parsed.sources && parsed.sources.length > 0) {
-        for (const src of parsed.sources) {
-          if (src.url && src.url.includes('.m3u8')) {
-            sources.push({
-              quality: src.quality || 'auto',
-              url: src.url,
-              provider,
-            });
-          }
-        }
-        if (parsed.subtitles && subtitles.length === 0) {
-          subtitles = parsed.subtitles || [];
-        }
-        if (sources.length > 0) break;
+    for (const src of sources) {
+      const key = src.url.split('?')[0];
+      if (!seenUrls.has(key)) {
+        seenUrls.add(key);
+        allSources.push({ ...src, provider });
       }
-    } catch {
-      continue;
     }
   }
 
-  if (sources.length === 0) {
+  if (allSources.length === 0) {
     process.stdout.write(JSON.stringify({ success: false, error: 'No sources found' }) + '\n');
     process.exit(0);
   }
 
-  process.stdout.write(JSON.stringify({ success: true, sources, subtitles }) + '\n');
+  allSources.sort((a, b) => qualityRank(a.quality) - qualityRank(b.quality));
+
+  process.stdout.write(JSON.stringify({ success: true, sources: allSources, subtitles }) + '\n');
 }
 
 main().catch(e => {
