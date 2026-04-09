@@ -1,3 +1,26 @@
-<svg width="180" height="180" viewBox="0 0 180 180" fill="none" xmlns="http://www.w3.org/2000/svg">
-<rect width="180" height="180" rx="36" fill="#FF3C00"/>
+<svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="32" y2="32" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#0e0e20"/>
+      <stop offset="100%" stop-color="#05050c"/>
+    </linearGradient>
+    <linearGradient id="bar" x1="5" y1="0" x2="27" y2="0" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#7F77DD"/>
+      <stop offset="100%" stop-color="#c0bdf5"/>
+    </linearGradient>
+    <filter id="glow" x="-40%" y="-80%" width="180%" height="360%">
+      <feGaussianBlur stdDeviation="1.5" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="32" height="32" rx="7" fill="url(#bg)"/>
+
+  <!-- H — left leg -->
+  <rect x="5" y="6" width="6" height="20" rx="1.5" fill="white"/>
+  <!-- H — right leg -->
+  <rect x="21" y="6" width="6" height="20" rx="1.5" fill="white"/>
+  <!-- H — purple crossbar with glow -->
+  <rect x="5" y="13" width="22" height="6" rx="1.5" fill="url(#bar)" filter="url(#glow)"/>
 </svg>
