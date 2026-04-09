@@ -23,6 +23,28 @@ export function VideoPlayer({ src, sourceType, poster, tracks = [], onReady }: V
 
   useEffect(() => {
     shaka.polyfill.installAll();
+
+    const MEDIA_ABORT_MSG = "fetching process for the media resource was aborted";
+
+    const suppressWindowError = (e: ErrorEvent) => {
+      if (e.message?.includes(MEDIA_ABORT_MSG)) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+      }
+    };
+    const suppressUnhandled = (e: PromiseRejectionEvent) => {
+      const msg = e.reason?.message ?? String(e.reason ?? "");
+      if (msg.includes(MEDIA_ABORT_MSG) || msg.includes("MEDIA_ELEMENT_ERROR")) {
+        e.preventDefault();
+      }
+    };
+
+    window.addEventListener("error", suppressWindowError, true);
+    window.addEventListener("unhandledrejection", suppressUnhandled, true);
+    return () => {
+      window.removeEventListener("error", suppressWindowError, true);
+      window.removeEventListener("unhandledrejection", suppressUnhandled, true);
+    };
   }, []);
 
   useEffect(() => {
