@@ -337,23 +337,26 @@ export async function getStreamSources(
     fetch(videasyPath),
   ]);
 
-  const allSources: StreamSource[] = [];
+  const vidlinkSources: StreamSource[] = [];
+  const videasySources: StreamSource[] = [];
 
   if (vidlinkRes.status === "fulfilled" && vidlinkRes.value.ok) {
     const data: StreamResponse = await vidlinkRes.value.json();
-    allSources.push(...data.sources.map(s => ({ ...s, name: "VidLink" })));
+    vidlinkSources.push(...data.sources.map(s => ({ ...s, name: "VidLink" })));
   }
 
   if (videasyRes.status === "fulfilled" && videasyRes.value.ok) {
     const data: StreamResponse = await videasyRes.value.json();
-    allSources.push(...data.sources);
+    videasySources.push(...data.sources);
   }
 
-  if (allSources.length === 0) {
+  if (vidlinkSources.length === 0 && videasySources.length === 0) {
     throw new Error("Stream unavailable — no sources returned");
   }
 
-  return allSources;
+  const videasy720 = videasySources.filter(s => s.name.includes("720"));
+  const videasyOther = videasySources.filter(s => !s.name.includes("720"));
+  return [...videasy720, ...videasyOther, ...vidlinkSources];
 }
 
 export async function getSeasonEpisodes(tmdbId: number, season: number): Promise<Episode[]> {
