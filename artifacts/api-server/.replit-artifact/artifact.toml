@@ -10,7 +10,7 @@ name = "API Server"
 paths = ["/api"]
 
 [services.development]
-run = "cd /home/runner/workspace && PORT=8080 uv run python artifacts/api-server-py/main.py"
+run = "cd /home/runner/workspace && PORT=8080 python artifacts/api-server-py/main.py"
 
 [services.production]
 build = ["bash", "-c", "python3 -m venv .venv && PIP_CONFIG_FILE=/dev/null .venv/bin/pip install -r artifacts/api-server-py/requirements.txt --quiet"]
