@@ -1,7 +1,7 @@
 import re
 import time
 import urllib.parse
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import Response, StreamingResponse
 from curl_cffi import requests as cffi_requests
 
@@ -87,11 +87,12 @@ def _rewrite_m3u8(content: str, base_url: str, proxy_prefix: str) -> str:
     return "\n".join(out)
 
 
-@router.get("/proxy/hls")
-async def proxy_hls(url: str):
+@router.api_route("/proxy/hls", methods=["GET", "HEAD"])
+async def proxy_hls(request: Request, url: str):
     """Proxy an HLS m3u8 or video segment with Chrome fingerprinting to bypass Cloudflare."""
     if not url.startswith("http"):
         raise HTTPException(status_code=400, detail="Invalid URL")
+    is_head = request.method == "HEAD"
 
     try:
         resp = _fetch_with_retry(url)
@@ -105,6 +106,12 @@ async def proxy_hls(url: str):
     is_m3u8 = "mpegurl" in content_type.lower() or url.split("?")[0].endswith(".m3u8")
 
     if is_m3u8:
+        if is_head:
+            return Response(
+                content=b"",
+                media_type="application/vnd.apple.mpegurl",
+                headers={"Access-Control-Allow-Origin": "*", "Cache-Control": "no-cache"},
+            )
         body_text = resp.text
         proxy_prefix = "/api/proxy/hls?url="
         rewritten = _rewrite_m3u8(body_text, url, proxy_prefix)
@@ -118,7 +125,7 @@ async def proxy_hls(url: str):
         )
     else:
         # Segments may be disguised with fake extensions (.jpg, .html, .css, etc.)
-        # Always serve as MPEG-TS so VideoJS can decode them correctly
+        # Always serve as MPEG-TS so the player can decode them correctly
         raw_path = url.split("?")[0].lower()
         non_ts_exts = (".m3u8", ".vtt", ".srt", ".ass", ".key")
         if any(raw_path.endswith(ext) for ext in non_ts_exts):
@@ -126,7 +133,7 @@ async def proxy_hls(url: str):
         else:
             media_type = "video/mp2t"
         return Response(
-            content=resp.content,
+            content=b"" if is_head else resp.content,
             media_type=media_type,
             headers={
                 "Access-Control-Allow-Origin": "*",
