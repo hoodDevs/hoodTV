@@ -177,42 +177,50 @@ export function Navbar() {
           </button>
 
           {/* Profile */}
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "11px",
-              padding: "10px 14px",
-              borderRadius: "10px",
-              cursor: "pointer",
-              transition: "background 0.18s",
-            }}
-            className="sidebar-link"
-          >
+          <Link href="/profile">
             <div
               style={{
-                width: "28px",
-                height: "28px",
-                borderRadius: "8px",
-                background: "linear-gradient(135deg, rgba(127,119,221,0.3) 0%, rgba(157,151,232,0.15) 100%)",
-                border: "1.5px solid rgba(127,119,221,0.5)",
                 display: "flex",
                 alignItems: "center",
-                justifyContent: "center",
-                fontSize: "11px",
-                fontWeight: 700,
-                color: "#9D97E8",
-                flexShrink: 0,
-                fontFamily: "'DM Sans', sans-serif",
-                letterSpacing: "0.03em",
+                gap: "11px",
+                padding: "10px 14px",
+                borderRadius: "10px",
+                cursor: "pointer",
+                transition: "background 0.18s",
+                background: location.startsWith("/profile") ? "rgba(127,119,221,0.15)" : "transparent",
               }}
+              className="sidebar-link"
             >
-              HT
+              <div
+                style={{
+                  width: "28px",
+                  height: "28px",
+                  borderRadius: "8px",
+                  background: "linear-gradient(135deg, rgba(127,119,221,0.3) 0%, rgba(157,151,232,0.15) 100%)",
+                  border: `1.5px solid ${location.startsWith("/profile") ? "rgba(127,119,221,0.7)" : "rgba(127,119,221,0.5)"}`,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  fontSize: "11px",
+                  fontWeight: 700,
+                  color: "#9D97E8",
+                  flexShrink: 0,
+                  fontFamily: "'DM Sans', sans-serif",
+                  letterSpacing: "0.03em",
+                }}
+              >
+                HT
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <p style={{ fontSize: "13px", color: location.startsWith("/profile") ? "#c0bdf5" : "#888", fontWeight: location.startsWith("/profile") ? 500 : 400, lineHeight: 1.2 }}>
+                  Profile
+                </p>
+              </div>
+              {location.startsWith("/profile") && (
+                <div style={{ width: "4px", height: "4px", borderRadius: "50%", background: "#7F77DD", flexShrink: 0 }} />
+              )}
             </div>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <p style={{ fontSize: "13px", color: "#888", fontWeight: 400, lineHeight: 1.2 }}>Profile</p>
-            </div>
-          </div>
+          </Link>
         </div>
       </nav>
 

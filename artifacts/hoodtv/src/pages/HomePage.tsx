@@ -96,6 +96,10 @@ export default function HomePage() {
     genres: w.genres,
   }));
 
+  const continueWatchingProgressMap: Record<string, number> = Object.fromEntries(
+    continueWatching.map((w) => [w.id, w.progress ?? 0])
+  );
+
   return (
     <div className="min-h-screen" style={{ backgroundColor: "#0a0a0a", color: "#f0f0f0" }}>
       <HeroSection items={trending} />
@@ -105,7 +109,7 @@ export default function HomePage() {
         {/* Continue watching */}
         {continueWatchingItems.length > 0 && (
           <div style={{ paddingTop: "24px" }}>
-            <ContentRow title="Continue Watching" items={continueWatchingItems} accent />
+            <ContentRow title="Continue Watching" items={continueWatchingItems} accent progressMap={continueWatchingProgressMap} />
           </div>
         )}
 

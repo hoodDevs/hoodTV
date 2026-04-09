@@ -10,6 +10,7 @@ import TitlePage from "@/pages/TitlePage";
 import WatchPage from "@/pages/WatchPage";
 import MyListPage from "@/pages/MyListPage";
 import TrendingPage from "@/pages/TrendingPage";
+import ProfilePage from "@/pages/ProfilePage";
 import { Navbar, SIDEBAR_WIDTH } from "@/components/Navbar";
 import { MusicPlayerProvider } from "@/music/context/MusicPlayerContext";
 import { MusicHomePage } from "@/music/pages/MusicHomePage";
@@ -53,6 +54,7 @@ function Router() {
         <Route path="/title/:id" component={TitlePage} />
         <Route path="/watch/:id" component={WatchPage} />
         <Route path="/mylist" component={MyListPage} />
+        <Route path="/profile" component={ProfilePage} />
         <Route path="/music" component={MusicHomePage} />
         <Route path="/music/videos" component={MusicVideosPage} />
         <Route path="/music/videos/:videoId" component={MusicVideoWatchPage} />

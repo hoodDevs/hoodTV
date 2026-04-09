@@ -10,9 +10,10 @@ interface ContentRowProps {
   loading?: boolean;
   accent?: boolean;
   seeAllHref?: string;
+  progressMap?: Record<string, number>;
 }
 
-export function ContentRow({ title, items, loading = false, accent = false, seeAllHref }: ContentRowProps) {
+export function ContentRow({ title, items, loading = false, accent = false, seeAllHref, progressMap }: ContentRowProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [showLeft, setShowLeft] = useState(false);
   const [showRight, setShowRight] = useState(true);
@@ -230,7 +231,7 @@ export function ContentRow({ title, items, loading = false, accent = false, seeA
               ))
             : items.map((item, idx) => (
                 <div key={`${title}-${item.id}-${idx}`} className="snap-start flex-shrink-0">
-                  <MediaCard item={item} />
+                  <MediaCard item={item} progress={progressMap?.[item.id]} />
                 </div>
               ))}
         </div>
