@@ -24,7 +24,9 @@ app.get("/api/yt/search", async (req, res) => {
     if (!title) return res.status(400).json({ error: "title required" });
 
     let query;
-    if (type === "tv" && season && episode) {
+    if (type === "music") {
+      query = `${title} official music video`;
+    } else if (type === "tv" && season && episode) {
       query = `${title} season ${season} episode ${episode} full episode`;
     } else {
       query = `${title}${year ? ` ${year}` : ""} full movie`;

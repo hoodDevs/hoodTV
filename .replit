@@ -32,6 +32,10 @@ args = "Scala Gateway"
 task = "workflow.run"
 args = "Go Proxy"
 
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "YouTube Music Video Service"
+
 [[workflows.workflow]]
 name = "Start application"
 author = "agent"
@@ -89,6 +93,18 @@ outputType = "console"
 task = "shell.exec"
 args = "PATH=$PATH:/nix/var/nix/profiles/default/bin PORT=8090 go run artifacts/go-proxy/main.go"
 
+[[workflows.workflow]]
+name = "YouTube Music Video Service"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "cd artifacts/yt-service && PORT=8099 node src/index.js"
+waitForPort = 8099
+
+[workflows.workflow.metadata]
+outputType = "console"
+
 [agent]
 stack = "PNPM_WORKSPACE"
 expertMode = true
@@ -102,6 +118,10 @@ localPort = 8000
 externalPort = 8000
 
 [[ports]]
+localPort = 8070
+externalPort = 3002
+
+[[ports]]
 localPort = 8080
 externalPort = 8080
 
@@ -112,6 +132,10 @@ externalPort = 80
 [[ports]]
 localPort = 8090
 externalPort = 3001
+
+[[ports]]
+localPort = 8099
+externalPort = 8099
 
 [[ports]]
 localPort = 9000
