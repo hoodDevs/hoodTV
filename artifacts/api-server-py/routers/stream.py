@@ -138,12 +138,27 @@ def _build_captions(subtitles: list) -> List[Caption]:
 
 async def _url_reachable(url: str) -> bool:
     """Quick HEAD check to confirm the upstream CDN URL is alive."""
+    parsed = urllib.parse.urlparse(url)
+    host = parsed.netloc.lower()
+    if any(d in host for d in ("vidplus.dev", "videasy.net", "megafiles.store",
+                                "nightbreeze", "shadowpanda", "quietlynx",
+                                "aurorabird", "skyember", "cloudrabbit")):
+        ref = "https://player.videasy.net/"
+    else:
+        ref = "https://vidlink.pro/"
     try:
-        async with httpx.AsyncClient(timeout=8) as client:
-            r = await client.head(url, headers={"User-Agent": "Mozilla/5.0"}, follow_redirects=True)
+        async with httpx.AsyncClient(timeout=3) as client:
+            r = await client.head(
+                url,
+                headers={
+                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0.0.0 Safari/537.36",
+                    "Referer": ref,
+                },
+                follow_redirects=True,
+            )
             return r.status_code < 500
     except Exception:
-        return False
+        return True  # assume reachable if check times out — player will handle errors
 
 
 async def _resolve(

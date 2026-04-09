@@ -12,6 +12,7 @@ interface Props {
   tracks?: TrackOption[];
   onReady?: (v: HTMLVideoElement) => void;
   onError?: (code: number | string) => void;
+  sourceType?: string;
 }
 
 type Level = { height: number; bitrate: number };
@@ -23,12 +24,14 @@ export function VideoPlayer({ src, poster, tracks = [], onReady, onError }: Prop
   const netRetryRef  = useRef(0);
   const mediaRetryRef = useRef(0);
 
-  const [muted,       setMuted]       = useState(true);
-  const [buffering,   setBuffering]   = useState(true);
-  const [levels,      setLevels]      = useState<Level[]>([]);
-  const [curLevel,    setCurLevel]    = useState(-1);
-  const [qOpen,       setQOpen]       = useState(false);
-  const [errMsg,      setErrMsg]      = useState("");
+  const [muted,         setMuted]       = useState(true);
+  const [buffering,     setBuffering]   = useState(true);
+  const [levels,        setLevels]      = useState<Level[]>([]);
+  const [curLevel,      setCurLevel]    = useState(-1);
+  const [qOpen,         setQOpen]       = useState(false);
+  const [errMsg,        setErrMsg]      = useState("");
+  const [needsClick,    setNeedsClick]  = useState(false);
+  const [playAttempted, setPlayAttempted] = useState(false);
 
   // ── initialise / re-initialise whenever src changes ──────────────────────
   useEffect(() => {
@@ -48,6 +51,8 @@ export function VideoPlayer({ src, poster, tracks = [], onReady, onError }: Prop
     setCurLevel(-1);
     setQOpen(false);
     setErrMsg("");
+    setNeedsClick(false);
+    setPlayAttempted(false);
 
     video.muted = true;
     video.volume = 1;
@@ -61,16 +66,16 @@ export function VideoPlayer({ src, poster, tracks = [], onReady, onError }: Prop
 
     if (Hls.isSupported()) {
       const hls = new Hls({
-        enableWorker:          false,
-        lowLatencyMode:        false,
-        maxBufferLength:       60,
-        maxMaxBufferLength:    120,
-        startLevel:            -1,
+        enableWorker:           false,
+        lowLatencyMode:         false,
+        maxBufferLength:        30,
+        maxMaxBufferLength:     60,
+        startLevel:             -1,
         abrEwmaDefaultEstimate: 2_000_000,
-        progressive:           false,
-        fragLoadingTimeOut:    30_000,
+        progressive:            false,
+        fragLoadingTimeOut:     30_000,
         manifestLoadingTimeOut: 20_000,
-        levelLoadingTimeOut:   20_000,
+        levelLoadingTimeOut:    20_000,
       });
       hlsRef.current = hls;
 
@@ -88,7 +93,11 @@ export function VideoPlayer({ src, poster, tracks = [], onReady, onError }: Prop
       hls.on(Hls.Events.MANIFEST_PARSED, (_e, d) => {
         setLevels(d.levels.map((l) => ({ height: l.height, bitrate: l.bitrate })));
         setCurLevel(hls.currentLevel);
-        video.play().catch(() => {});
+        setPlayAttempted(true);
+        video.play().catch(() => {
+          setNeedsClick(true);
+          setBuffering(false);
+        });
         onReady?.(video);
       });
 
@@ -159,13 +168,15 @@ export function VideoPlayer({ src, poster, tracks = [], onReady, onError }: Prop
     return () => document.removeEventListener("mousedown", h);
   }, []);
 
-  const unmute = useCallback(() => {
+  const startPlay = useCallback(() => {
     const v = videoRef.current;
     if (!v) return;
     v.muted  = false;
     v.volume = 1;
     setMuted(false);
-    v.play().catch(() => {});
+    setNeedsClick(false);
+    setBuffering(true);
+    v.play().catch(() => { setBuffering(false); });
   }, []);
 
   const setQuality = useCallback((lvl: number) => {
@@ -220,9 +231,21 @@ export function VideoPlayer({ src, poster, tracks = [], onReady, onError }: Prop
         </div>
       )}
 
-      {/* unmute overlay — shown until user clicks */}
-      {muted && !errMsg && (
-        <button style={S.unmuteBtn} onClick={unmute}>
+      {/* click-to-play overlay — shown when autoplay is blocked */}
+      {needsClick && !errMsg && (
+        <div style={S.playOverlay} onClick={startPlay}>
+          <div style={S.playBtn}>
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="currentColor">
+              <polygon points="5 3 19 12 5 21 5 3"/>
+            </svg>
+          </div>
+          <p style={S.playHint}>Click to play</p>
+        </div>
+      )}
+
+      {/* unmute overlay — shown after playback starts while still muted */}
+      {playAttempted && muted && !needsClick && !errMsg && (
+        <button style={S.unmuteBtn} onClick={startPlay}>
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
             <line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/>
@@ -313,6 +336,38 @@ const S: Record<string, React.CSSProperties> = {
     fontSize: 14,
     fontFamily: "'DM Sans', sans-serif",
     margin: 0,
+  },
+  playOverlay: {
+    position: "absolute",
+    inset: 0,
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 14,
+    background: "rgba(5,5,12,0.6)",
+    cursor: "pointer",
+    zIndex: 10,
+  },
+  playBtn: {
+    width: 72,
+    height: 72,
+    borderRadius: "50%",
+    background: "rgba(127,119,221,0.9)",
+    backdropFilter: "blur(12px)",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    color: "#fff",
+    boxShadow: "0 4px 24px rgba(127,119,221,0.5)",
+    transition: "transform 0.15s",
+  },
+  playHint: {
+    color: "rgba(255,255,255,0.75)",
+    fontSize: 14,
+    fontFamily: "'DM Sans', sans-serif",
+    margin: 0,
+    letterSpacing: "0.04em",
   },
   unmuteBtn: {
     position: "absolute",
