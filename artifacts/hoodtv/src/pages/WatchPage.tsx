@@ -2,7 +2,8 @@ import { useState, useEffect, useRef } from "react";
 import { useParams, useLocation } from "wouter";
 import {
   ArrowLeft, ChevronLeft, ChevronRight,
-  AlertCircle, RotateCcw, Info, Wifi, Server
+  AlertCircle, RotateCcw, Info, Layers, Check,
+  Star, Calendar, Film
 } from "lucide-react";
 import { getTitleDetails, getStreamSources } from "@/lib/api";
 import type { TitleDetails, StreamSource } from "@/lib/api";
@@ -116,14 +117,34 @@ export default function WatchPage() {
 
   return (
     <div style={{ minHeight: "100vh", background: "#05050c", display: "flex", flexDirection: "column" }}>
+      <style>{`
+        @keyframes watch-spin {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
+        @keyframes watch-pulse {
+          0%, 100% { opacity: 0.5; transform: scale(1); }
+          50% { opacity: 1; transform: scale(1.08); }
+        }
+        @keyframes watch-fadein {
+          from { opacity: 0; transform: translateY(8px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        .src-btn:hover { background: rgba(127,119,221,0.18) !important; color: #c0bdf5 !important; border-color: rgba(127,119,221,0.35) !important; }
+        .back-btn:hover { background: rgba(0,0,0,0.7) !important; color: #fff !important; }
+        .info-btn:hover { background: rgba(127,119,221,0.2) !important; color: #c0bdf5 !important; border-color: rgba(127,119,221,0.4) !important; }
+        .retry-btn:hover { background: #9590e8 !important; box-shadow: 0 6px 28px rgba(127,119,221,0.55) !important; }
+        .goback-btn:hover { background: rgba(255,255,255,0.09) !important; color: #fff !important; }
+        .ep-prev-btn:hover { background: rgba(127,119,221,0.22) !important; color: #c0bdf5 !important; }
+        .ep-next-btn:hover { background: rgba(127,119,221,0.4) !important; }
+        .detail-btn:hover { background: rgba(127,119,221,0.18) !important; color: #c0bdf5 !important; border-color: rgba(127,119,221,0.32) !important; }
+      `}</style>
 
-      {/* ─── Cinema block: top bar + player ─── */}
-      {/* Height = smaller of: full viewport OR native 16:9 + 46px control bar */}
-      {/* This keeps the player tight around the video with no wasted black space */}
+      {/* ── Cinema block ── */}
       <div style={{
         width: "100%",
         height: "min(100vh, calc(56.25vw + 46px))",
-        minHeight: "280px",
+        minHeight: "300px",
         display: "flex",
         flexDirection: "column",
         position: "relative",
@@ -131,49 +152,41 @@ export default function WatchPage() {
         flexShrink: 0,
       }}>
 
-        {/* Top bar — overlaid on player */}
+        {/* Top bar */}
         <div style={{
           position: "absolute",
           top: 0, left: 0, right: 0,
-          height: "60px",
+          height: "68px",
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
           padding: "0 20px",
-          background: "linear-gradient(to bottom, rgba(0,0,0,0.75) 0%, transparent 100%)",
+          background: "linear-gradient(to bottom, rgba(0,0,0,0.8) 0%, transparent 100%)",
           zIndex: 10,
-          pointerEvents: "none",
         }}>
           <button
+            className="back-btn"
             onClick={goBack}
             style={{
-              display: "flex", alignItems: "center", gap: "8px",
-              background: "rgba(0,0,0,0.45)",
-              backdropFilter: "blur(8px)",
-              border: "1px solid rgba(255,255,255,0.12)",
-              borderRadius: "20px",
-              padding: "7px 16px 7px 12px",
+              display: "flex", alignItems: "center", gap: "7px",
+              background: "rgba(0,0,0,0.5)",
+              backdropFilter: "blur(12px)",
+              WebkitBackdropFilter: "blur(12px)",
+              border: "1px solid rgba(255,255,255,0.1)",
+              borderRadius: "22px",
+              padding: "8px 18px 8px 13px",
               color: "rgba(255,255,255,0.85)",
               fontSize: "13px", fontWeight: 500,
               cursor: "pointer",
               transition: "all 0.2s",
               fontFamily: "'DM Sans', sans-serif",
-              pointerEvents: "all",
-            }}
-            onMouseEnter={(e) => {
-              (e.currentTarget as HTMLElement).style.background = "rgba(0,0,0,0.65)";
-              (e.currentTarget as HTMLElement).style.color = "#fff";
-            }}
-            onMouseLeave={(e) => {
-              (e.currentTarget as HTMLElement).style.background = "rgba(0,0,0,0.45)";
-              (e.currentTarget as HTMLElement).style.color = "rgba(255,255,255,0.85)";
             }}
           >
-            <ArrowLeft size={15} />
+            <ArrowLeft size={14} />
             Back
           </button>
 
-          <div style={{ textAlign: "center", flex: 1, padding: "0 16px", pointerEvents: "none" }}>
+          <div style={{ textAlign: "center", flex: 1, padding: "0 16px" }}>
             {title && (
               <p style={{
                 fontFamily: "'DM Sans', sans-serif",
@@ -183,11 +196,11 @@ export default function WatchPage() {
                 whiteSpace: "nowrap",
                 overflow: "hidden",
                 textOverflow: "ellipsis",
-                textShadow: "0 1px 6px rgba(0,0,0,0.8)",
+                textShadow: "0 1px 8px rgba(0,0,0,0.9)",
               }}>
                 {title}
                 {season !== undefined && episode !== undefined && (
-                  <span style={{ color: "rgba(255,255,255,0.45)", fontWeight: 400, marginLeft: "8px", fontSize: "12px" }}>
+                  <span style={{ color: "rgba(255,255,255,0.38)", fontWeight: 400, marginLeft: "8px", fontSize: "12px" }}>
                     S{season} · E{episode}
                   </span>
                 )}
@@ -196,39 +209,30 @@ export default function WatchPage() {
           </div>
 
           <button
+            className="info-btn"
             onClick={() => id && setLocation(`/title/${id}?type=${typeParam}`)}
             style={{
               display: "flex", alignItems: "center", justifyContent: "center",
-              width: "36px", height: "36px",
+              width: "38px", height: "38px",
               borderRadius: "50%",
-              background: "rgba(0,0,0,0.45)",
-              backdropFilter: "blur(8px)",
-              border: "1px solid rgba(255,255,255,0.12)",
-              color: "rgba(255,255,255,0.65)",
+              background: "rgba(0,0,0,0.5)",
+              backdropFilter: "blur(12px)",
+              WebkitBackdropFilter: "blur(12px)",
+              border: "1px solid rgba(255,255,255,0.1)",
+              color: "rgba(255,255,255,0.6)",
               cursor: "pointer",
               transition: "all 0.2s",
               flexShrink: 0,
-              pointerEvents: "all",
-            }}
-            onMouseEnter={(e) => {
-              (e.currentTarget as HTMLElement).style.background = "rgba(127,119,221,0.25)";
-              (e.currentTarget as HTMLElement).style.color = "#c0bdf5";
-              (e.currentTarget as HTMLElement).style.borderColor = "rgba(127,119,221,0.4)";
-            }}
-            onMouseLeave={(e) => {
-              (e.currentTarget as HTMLElement).style.background = "rgba(0,0,0,0.45)";
-              (e.currentTarget as HTMLElement).style.color = "rgba(255,255,255,0.65)";
-              (e.currentTarget as HTMLElement).style.borderColor = "rgba(255,255,255,0.12)";
             }}
           >
             <Info size={15} />
           </button>
         </div>
 
-        {/* Player fills remaining cinema block */}
+        {/* Player area */}
         <div style={{ flex: 1, position: "relative", overflow: "hidden" }}>
 
-          {/* ── Loading state ── */}
+          {/* Loading */}
           {loadState === "loading" && (
             <div style={{
               position: "absolute", inset: 0,
@@ -245,54 +249,85 @@ export default function WatchPage() {
                       position: "absolute", inset: 0,
                       width: "100%", height: "100%",
                       objectFit: "cover",
-                      filter: "brightness(0.15) saturate(0.4) blur(3px)",
-                      transform: "scale(1.04)",
+                      filter: "brightness(0.12) saturate(0.3) blur(4px)",
+                      transform: "scale(1.06)",
                       pointerEvents: "none",
                     }}
                   />
                   <div style={{
                     position: "absolute", inset: 0,
-                    background: "radial-gradient(ellipse 70% 60% at 50% 50%, transparent 0%, rgba(0,0,0,0.65) 100%)",
+                    background: "radial-gradient(ellipse 80% 70% at 50% 50%, rgba(127,119,221,0.04) 0%, rgba(0,0,0,0.7) 100%)",
                     pointerEvents: "none",
                   }} />
                 </>
               )}
-              <div style={{ position: "relative", zIndex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: "20px" }}>
-                <div style={{
-                  width: "56px", height: "56px",
-                  borderRadius: "50%",
-                  border: "2px solid rgba(127,119,221,0.12)",
-                  borderTop: "2px solid #7F77DD",
-                  animation: "watch-spin 0.9s linear infinite",
-                  boxShadow: "0 0 28px rgba(127,119,221,0.2)",
-                }} />
+              <div style={{ position: "relative", zIndex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: "28px", animation: "watch-fadein 0.4s ease" }}>
+                {/* Spinner with rings */}
+                <div style={{ position: "relative", width: "72px", height: "72px" }}>
+                  <div style={{
+                    position: "absolute", inset: 0,
+                    borderRadius: "50%",
+                    border: "1.5px solid rgba(127,119,221,0.08)",
+                    borderTop: "1.5px solid #7F77DD",
+                    animation: "watch-spin 1s linear infinite",
+                    boxShadow: "0 0 32px rgba(127,119,221,0.25)",
+                  }} />
+                  <div style={{
+                    position: "absolute", inset: "10px",
+                    borderRadius: "50%",
+                    border: "1px solid rgba(127,119,221,0.05)",
+                    borderTop: "1px solid rgba(127,119,221,0.4)",
+                    animation: "watch-spin 0.65s linear infinite reverse",
+                  }} />
+                  <div style={{
+                    position: "absolute", inset: "20px",
+                    borderRadius: "50%",
+                    background: "rgba(127,119,221,0.12)",
+                    animation: "watch-pulse 2s ease-in-out infinite",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                  }}>
+                    <Film size={14} style={{ color: "#9D97E8" }} />
+                  </div>
+                </div>
+
                 <div style={{ textAlign: "center" }}>
                   <p style={{
-                    fontSize: "12px", fontWeight: 500,
-                    color: "rgba(255,255,255,0.45)",
-                    letterSpacing: "0.12em",
+                    fontSize: "11px", fontWeight: 600,
+                    color: "rgba(255,255,255,0.38)",
+                    letterSpacing: "0.16em",
                     textTransform: "uppercase",
                     fontFamily: "'DM Sans', sans-serif",
+                    marginBottom: "6px",
                   }}>
                     Finding stream
                   </p>
                   {title && (
                     <p style={{
-                      fontSize: "11px",
-                      color: "rgba(255,255,255,0.2)",
-                      marginTop: "5px",
+                      fontSize: "12px",
+                      color: "rgba(255,255,255,0.18)",
                       fontFamily: "'DM Sans', sans-serif",
                     }}>
                       {title}{season !== undefined ? ` · S${season}E${episode}` : ""}
                     </p>
                   )}
                 </div>
+
+                {/* Pulse dots */}
+                <div style={{ display: "flex", gap: "6px" }}>
+                  {[0, 1, 2].map(i => (
+                    <div key={i} style={{
+                      width: "5px", height: "5px",
+                      borderRadius: "50%",
+                      background: "#7F77DD",
+                      animation: `watch-pulse 1.2s ease-in-out ${i * 0.2}s infinite`,
+                    }} />
+                  ))}
+                </div>
               </div>
-              <style>{`@keyframes watch-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
             </div>
           )}
 
-          {/* ── Error state ── */}
+          {/* Error */}
           {loadState === "error" && (
             <div style={{
               position: "absolute", inset: 0,
@@ -305,57 +340,68 @@ export default function WatchPage() {
                     position: "absolute", inset: 0,
                     width: "100%", height: "100%",
                     objectFit: "cover",
-                    filter: "brightness(0.05) saturate(0.2)",
+                    filter: "brightness(0.04) saturate(0.15)",
                     pointerEvents: "none",
                   }}
                 />
               )}
+              {/* Purple glow */}
+              <div style={{
+                position: "absolute", inset: 0,
+                background: "radial-gradient(ellipse 50% 40% at 50% 50%, rgba(127,119,221,0.07) 0%, transparent 70%)",
+                pointerEvents: "none",
+              }} />
               <div style={{
                 position: "relative", zIndex: 1,
-                textAlign: "center", maxWidth: "400px", padding: "0 28px",
+                textAlign: "center", maxWidth: "380px", padding: "0 28px",
+                animation: "watch-fadein 0.35s ease",
               }}>
                 <div style={{
-                  width: "56px", height: "56px", borderRadius: "50%",
+                  width: "64px", height: "64px", borderRadius: "50%",
                   background: "rgba(127,119,221,0.08)",
-                  border: "1px solid rgba(127,119,221,0.18)",
+                  border: "1.5px solid rgba(127,119,221,0.22)",
                   display: "flex", alignItems: "center", justifyContent: "center",
-                  margin: "0 auto 18px",
+                  margin: "0 auto 20px",
+                  boxShadow: "0 0 40px rgba(127,119,221,0.12)",
                 }}>
-                  <AlertCircle size={24} style={{ color: "#7F77DD" }} />
+                  <AlertCircle size={26} style={{ color: "#7F77DD" }} />
                 </div>
-                <p style={{ fontSize: "20px", fontWeight: 700, color: "#fff", marginBottom: "10px", fontFamily: "'DM Sans', sans-serif", letterSpacing: "-0.02em" }}>
+                <p style={{
+                  fontSize: "22px", fontWeight: 700,
+                  color: "#eeeef8", marginBottom: "10px",
+                  fontFamily: "'DM Sans', sans-serif",
+                  letterSpacing: "-0.02em",
+                }}>
                   Stream unavailable
                 </p>
-                <p style={{ fontSize: "13px", color: "rgba(255,255,255,0.35)", marginBottom: "26px", lineHeight: 1.6, fontFamily: "'DM Sans', sans-serif" }}>
+                <p style={{
+                  fontSize: "13px", color: "rgba(255,255,255,0.32)",
+                  marginBottom: "28px", lineHeight: 1.65,
+                  fontFamily: "'DM Sans', sans-serif",
+                }}>
                   {errorMsg || "We couldn't find a working stream right now."}
                 </p>
                 <div style={{ display: "flex", gap: "10px", justifyContent: "center" }}>
-                  <button onClick={retry} style={{
+                  <button className="retry-btn" onClick={retry} style={{
                     display: "flex", alignItems: "center", gap: "7px",
-                    padding: "10px 22px", borderRadius: "10px",
+                    padding: "11px 22px", borderRadius: "12px",
                     fontSize: "13px", fontWeight: 600,
                     background: "#7F77DD", color: "#fff",
                     border: "none", cursor: "pointer",
-                    transition: "background 0.2s",
+                    transition: "all 0.2s",
                     fontFamily: "'DM Sans', sans-serif",
-                    boxShadow: "0 4px 20px rgba(127,119,221,0.4)",
-                  }}
-                  onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "#9590e8"; }}
-                  onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "#7F77DD"; }}
-                  >
+                    boxShadow: "0 4px 22px rgba(127,119,221,0.4)",
+                  }}>
                     <RotateCcw size={13} /> Try again
                   </button>
-                  <button onClick={goBack} style={{
-                    padding: "10px 22px", borderRadius: "10px",
+                  <button className="goback-btn" onClick={goBack} style={{
+                    padding: "11px 22px", borderRadius: "12px",
                     fontSize: "13px", fontWeight: 500,
-                    background: "rgba(255,255,255,0.06)", color: "rgba(255,255,255,0.6)",
-                    border: "1px solid rgba(255,255,255,0.1)", cursor: "pointer",
-                    transition: "background 0.2s",
+                    background: "rgba(255,255,255,0.05)", color: "rgba(255,255,255,0.5)",
+                    border: "1px solid rgba(255,255,255,0.09)", cursor: "pointer",
+                    transition: "all 0.2s",
                     fontFamily: "'DM Sans', sans-serif",
-                  }}
-                  onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.1)"; }}
-                  onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.06)"; }}
-                  >
+                  }}>
                     Go back
                   </button>
                 </div>
@@ -363,7 +409,7 @@ export default function WatchPage() {
             </div>
           )}
 
-          {/* ── Video.js player ── */}
+          {/* Video */}
           {loadState === "ready" && streamUrl && (
             <div key={streamUrl} style={{ position: "absolute", inset: 0 }}>
               <VideoPlayer
@@ -374,77 +420,57 @@ export default function WatchPage() {
             </div>
           )}
 
-          {/* ── Bottom overlay bar: episode nav + source switcher ── */}
-          {/* sits above the Video.js control bar (46px) */}
+          {/* Bottom controls overlay */}
           <div style={{
             position: "absolute",
             bottom: "46px",
             left: 0, right: 0,
-            padding: "40px 20px 12px",
+            padding: "48px 20px 12px",
             display: "flex",
             flexDirection: "column",
             gap: "10px",
             zIndex: 5,
             pointerEvents: "none",
-            background: "linear-gradient(to top, rgba(0,0,0,0.55) 0%, transparent 100%)",
+            background: "linear-gradient(to top, rgba(0,0,0,0.6) 0%, transparent 100%)",
           }}>
 
             {/* Episode nav */}
             {season !== undefined && episode !== undefined && (
-              <div style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                pointerEvents: "all",
-              }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", pointerEvents: "all" }}>
                 {episode > 1 ? (
                   <button
+                    className="ep-prev-btn"
                     onClick={() => goToEpisode(episode - 1)}
                     style={{
                       display: "flex", alignItems: "center", gap: "6px",
-                      padding: "6px 14px",
-                      borderRadius: "20px",
+                      padding: "7px 15px",
+                      borderRadius: "22px",
                       fontSize: "12px", fontWeight: 500,
-                      background: "rgba(0,0,0,0.5)",
-                      backdropFilter: "blur(8px)",
-                      color: "rgba(255,255,255,0.7)",
-                      border: "1px solid rgba(255,255,255,0.12)",
-                      cursor: "pointer",
-                      transition: "all 0.2s",
+                      background: "rgba(0,0,0,0.55)",
+                      backdropFilter: "blur(10px)",
+                      color: "rgba(255,255,255,0.65)",
+                      border: "1px solid rgba(255,255,255,0.1)",
+                      cursor: "pointer", transition: "all 0.2s",
                       fontFamily: "'DM Sans', sans-serif",
-                    }}
-                    onMouseEnter={(e) => {
-                      (e.currentTarget as HTMLElement).style.background = "rgba(127,119,221,0.25)";
-                      (e.currentTarget as HTMLElement).style.color = "#c0bdf5";
-                    }}
-                    onMouseLeave={(e) => {
-                      (e.currentTarget as HTMLElement).style.background = "rgba(0,0,0,0.5)";
-                      (e.currentTarget as HTMLElement).style.color = "rgba(255,255,255,0.7)";
                     }}
                   >
                     <ChevronLeft size={13} /> Ep {episode - 1}
                   </button>
                 ) : <div />}
                 <button
+                  className="ep-next-btn"
                   onClick={() => goToEpisode(episode + 1)}
                   style={{
                     display: "flex", alignItems: "center", gap: "6px",
-                    padding: "6px 14px",
-                    borderRadius: "20px",
-                    fontSize: "12px", fontWeight: 500,
-                    background: "rgba(127,119,221,0.2)",
-                    backdropFilter: "blur(8px)",
+                    padding: "7px 15px",
+                    borderRadius: "22px",
+                    fontSize: "12px", fontWeight: 600,
+                    background: "rgba(127,119,221,0.25)",
+                    backdropFilter: "blur(10px)",
                     color: "#c0bdf5",
-                    border: "1px solid rgba(127,119,221,0.3)",
-                    cursor: "pointer",
-                    transition: "all 0.2s",
+                    border: "1px solid rgba(127,119,221,0.35)",
+                    cursor: "pointer", transition: "all 0.2s",
                     fontFamily: "'DM Sans', sans-serif",
-                  }}
-                  onMouseEnter={(e) => {
-                    (e.currentTarget as HTMLElement).style.background = "rgba(127,119,221,0.35)";
-                  }}
-                  onMouseLeave={(e) => {
-                    (e.currentTarget as HTMLElement).style.background = "rgba(127,119,221,0.2)";
                   }}
                 >
                   Ep {episode + 1} <ChevronRight size={13} />
@@ -454,72 +480,52 @@ export default function WatchPage() {
 
             {/* Source switcher */}
             {loadState === "ready" && sources.length > 1 && (
-              <div style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "8px",
-                pointerEvents: "all",
-                position: "relative",
-              }} ref={sourceMenuRef}>
+              <div style={{ display: "flex", alignItems: "center", gap: "8px", pointerEvents: "all", position: "relative" }} ref={sourceMenuRef}>
                 <button
+                  className="src-btn"
                   onClick={() => setSourceMenuOpen(o => !o)}
                   style={{
                     display: "flex", alignItems: "center", gap: "7px",
                     padding: "7px 14px",
-                    borderRadius: "20px",
+                    borderRadius: "22px",
                     fontSize: "12px", fontWeight: 600,
-                    background: "rgba(0,0,0,0.55)",
-                    backdropFilter: "blur(10px)",
-                    border: "1px solid rgba(255,255,255,0.15)",
-                    color: "rgba(255,255,255,0.75)",
-                    cursor: "pointer",
-                    transition: "all 0.2s",
+                    background: "rgba(10,10,18,0.65)",
+                    backdropFilter: "blur(12px)",
+                    WebkitBackdropFilter: "blur(12px)",
+                    border: "1px solid rgba(255,255,255,0.12)",
+                    color: "rgba(255,255,255,0.72)",
+                    cursor: "pointer", transition: "all 0.2s",
                     fontFamily: "'DM Sans', sans-serif",
                   }}
-                  onMouseEnter={(e) => {
-                    (e.currentTarget as HTMLElement).style.background = "rgba(127,119,221,0.2)";
-                    (e.currentTarget as HTMLElement).style.color = "#c0bdf5";
-                    (e.currentTarget as HTMLElement).style.borderColor = "rgba(127,119,221,0.35)";
-                  }}
-                  onMouseLeave={(e) => {
-                    (e.currentTarget as HTMLElement).style.background = "rgba(0,0,0,0.55)";
-                    (e.currentTarget as HTMLElement).style.color = "rgba(255,255,255,0.75)";
-                    (e.currentTarget as HTMLElement).style.borderColor = "rgba(255,255,255,0.15)";
-                  }}
                 >
-                  <Server size={12} />
+                  <Layers size={12} style={{ opacity: 0.7 }} />
                   {sources[activeSource]?.name ?? "Source"}
-                  <span style={{
-                    fontSize: "10px",
-                    opacity: 0.5,
-                    marginLeft: "2px",
-                    fontWeight: 400,
-                  }}>▾</span>
+                  <span style={{ fontSize: "9px", opacity: 0.45, marginLeft: "1px" }}>▾</span>
                 </button>
 
-                {/* Source dropdown menu */}
                 {sourceMenuOpen && (
                   <div style={{
                     position: "absolute",
-                    bottom: "calc(100% + 8px)",
+                    bottom: "calc(100% + 10px)",
                     left: 0,
-                    background: "rgba(12,12,20,0.96)",
-                    backdropFilter: "blur(16px)",
-                    border: "1px solid rgba(255,255,255,0.1)",
-                    borderRadius: "12px",
-                    padding: "6px",
-                    minWidth: "180px",
-                    boxShadow: "0 8px 32px rgba(0,0,0,0.6)",
+                    background: "rgba(8,8,16,0.97)",
+                    backdropFilter: "blur(20px)",
+                    WebkitBackdropFilter: "blur(20px)",
+                    border: "1px solid rgba(127,119,221,0.15)",
+                    borderRadius: "14px",
+                    padding: "8px",
+                    minWidth: "200px",
+                    boxShadow: "0 12px 40px rgba(0,0,0,0.7), 0 0 0 1px rgba(127,119,221,0.08)",
                     zIndex: 20,
-                    overflow: "hidden",
+                    animation: "watch-fadein 0.15s ease",
                   }}>
                     <p style={{
                       fontSize: "10px",
-                      color: "rgba(255,255,255,0.25)",
-                      letterSpacing: "0.1em",
+                      color: "rgba(127,119,221,0.55)",
+                      letterSpacing: "0.12em",
                       textTransform: "uppercase",
-                      fontWeight: 600,
-                      padding: "4px 10px 8px",
+                      fontWeight: 700,
+                      padding: "4px 10px 9px",
                       fontFamily: "'DM Sans', sans-serif",
                     }}>
                       Switch source
@@ -531,12 +537,12 @@ export default function WatchPage() {
                         style={{
                           display: "flex", alignItems: "center", justifyContent: "space-between",
                           width: "100%",
-                          padding: "9px 10px",
-                          borderRadius: "8px",
+                          padding: "10px 11px",
+                          borderRadius: "9px",
                           fontSize: "13px", fontWeight: activeSource === i ? 600 : 400,
                           textAlign: "left",
-                          background: activeSource === i ? "rgba(127,119,221,0.18)" : "transparent",
-                          color: activeSource === i ? "#c0bdf5" : "rgba(255,255,255,0.6)",
+                          background: activeSource === i ? "rgba(127,119,221,0.16)" : "transparent",
+                          color: activeSource === i ? "#c0bdf5" : "rgba(255,255,255,0.55)",
                           border: "none",
                           cursor: "pointer",
                           transition: "all 0.15s",
@@ -545,28 +551,31 @@ export default function WatchPage() {
                         }}
                         onMouseEnter={(e) => {
                           if (activeSource !== i) {
-                            (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.06)";
-                            (e.currentTarget as HTMLElement).style.color = "#fff";
+                            (e.currentTarget as HTMLElement).style.background = "rgba(127,119,221,0.1)";
+                            (e.currentTarget as HTMLElement).style.color = "rgba(255,255,255,0.8)";
                           }
                         }}
                         onMouseLeave={(e) => {
                           if (activeSource !== i) {
                             (e.currentTarget as HTMLElement).style.background = "transparent";
-                            (e.currentTarget as HTMLElement).style.color = "rgba(255,255,255,0.6)";
+                            (e.currentTarget as HTMLElement).style.color = "rgba(255,255,255,0.55)";
                           }
                         }}
                       >
-                        <span style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                          <Wifi size={11} style={{ opacity: 0.5 }} />
+                        <span style={{ display: "flex", alignItems: "center", gap: "9px" }}>
+                          <span style={{
+                            width: "24px", height: "24px",
+                            borderRadius: "6px",
+                            background: activeSource === i ? "rgba(127,119,221,0.22)" : "rgba(255,255,255,0.06)",
+                            display: "flex", alignItems: "center", justifyContent: "center",
+                            flexShrink: 0,
+                          }}>
+                            <Layers size={11} style={{ opacity: activeSource === i ? 1 : 0.4, color: activeSource === i ? "#9D97E8" : "inherit" }} />
+                          </span>
                           {src.name}
                         </span>
                         {activeSource === i && (
-                          <span style={{
-                            width: "6px", height: "6px",
-                            borderRadius: "50%",
-                            background: "#7F77DD",
-                            flexShrink: 0,
-                          }} />
+                          <Check size={13} style={{ color: "#7F77DD", flexShrink: 0 }} />
                         )}
                       </button>
                     ))}
@@ -578,94 +587,154 @@ export default function WatchPage() {
         </div>
       </div>
 
-      {/* ─── Info panel — below the cinema block (scroll to see) ─── */}
+      {/* ── Info panel ── */}
       {details && (
-        <div style={{
-          padding: "32px 24px 48px",
-          background: "#05050c",
-          borderTop: "1px solid rgba(255,255,255,0.04)",
-        }}>
-          <div style={{ maxWidth: "860px", margin: "0 auto" }}>
+        <div style={{ position: "relative", background: "#05050c", overflow: "hidden" }}>
+          {/* Faint backdrop bleed from player */}
+          {details.backdrop && (
+            <div style={{
+              position: "absolute",
+              top: 0, left: 0, right: 0,
+              height: "260px",
+              backgroundImage: `url(${details.backdrop})`,
+              backgroundSize: "cover",
+              backgroundPosition: "center top",
+              filter: "brightness(0.06) saturate(0.25) blur(2px)",
+              maskImage: "linear-gradient(to bottom, rgba(0,0,0,0.5) 0%, transparent 100%)",
+              WebkitMaskImage: "linear-gradient(to bottom, rgba(0,0,0,0.5) 0%, transparent 100%)",
+              pointerEvents: "none",
+            }} />
+          )}
+          {/* Purple ambient glow */}
+          <div style={{
+            position: "absolute",
+            top: "-80px", left: "50%",
+            transform: "translateX(-50%)",
+            width: "600px", height: "200px",
+            background: "radial-gradient(ellipse at center, rgba(127,119,221,0.06) 0%, transparent 70%)",
+            pointerEvents: "none",
+          }} />
 
-            {/* Title + metadata row */}
-            <div style={{ display: "flex", alignItems: "flex-start", gap: "20px", marginBottom: "24px" }}>
+          <div style={{ position: "relative", zIndex: 1, padding: "36px 28px 52px", maxWidth: "900px", margin: "0 auto", animation: "watch-fadein 0.4s ease" }}>
+
+            {/* Main row */}
+            <div style={{ display: "flex", alignItems: "flex-start", gap: "24px", marginBottom: "28px" }}>
+
+              {/* Poster */}
               {details.poster && (
-                <img
-                  src={details.poster}
-                  alt={details.title}
-                  style={{
-                    width: "80px",
-                    aspectRatio: "2/3",
+                <div style={{ position: "relative", flexShrink: 0 }}>
+                  <img
+                    src={details.poster}
+                    alt={details.title}
+                    style={{
+                      width: "88px",
+                      aspectRatio: "2/3",
+                      borderRadius: "12px",
+                      objectFit: "cover",
+                      border: "1px solid rgba(255,255,255,0.07)",
+                      boxShadow: "0 12px 40px rgba(0,0,0,0.65), 0 0 0 1px rgba(127,119,221,0.1)",
+                    }}
+                  />
+                  {/* Playing indicator */}
+                  <div style={{
+                    position: "absolute",
+                    bottom: "-8px", left: "50%",
+                    transform: "translateX(-50%)",
+                    background: "#7F77DD",
                     borderRadius: "10px",
-                    objectFit: "cover",
-                    flexShrink: 0,
-                    border: "1px solid rgba(255,255,255,0.07)",
-                    boxShadow: "0 8px 28px rgba(0,0,0,0.55)",
-                  }}
-                />
+                    padding: "3px 9px",
+                    fontSize: "9px",
+                    fontWeight: 700,
+                    color: "#fff",
+                    letterSpacing: "0.08em",
+                    textTransform: "uppercase",
+                    fontFamily: "'DM Sans', sans-serif",
+                    whiteSpace: "nowrap",
+                    boxShadow: "0 3px 12px rgba(127,119,221,0.5)",
+                  }}>
+                    ▶ Now playing
+                  </div>
+                </div>
               )}
+
+              {/* Text info */}
               <div style={{ flex: 1, minWidth: 0, paddingTop: "2px" }}>
                 <h1 style={{
                   fontFamily: "'Bebas Neue', sans-serif",
-                  fontSize: "clamp(24px, 3.5vw, 36px)",
+                  fontSize: "clamp(26px, 3.5vw, 38px)",
                   letterSpacing: "0.04em",
                   color: "#eeeef8",
-                  marginBottom: "10px",
+                  marginBottom: "12px",
                   lineHeight: 1,
                 }}>
                   {details.title}
                 </h1>
 
-                <div style={{
-                  display: "flex",
-                  alignItems: "center",
-                  flexWrap: "wrap",
-                  marginBottom: "14px",
-                  gap: "0",
-                }}>
+                {/* Meta badges */}
+                <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: "8px", marginBottom: "16px" }}>
                   {ratingDisplay && (
-                    <>
-                      <span style={{
-                        display: "flex", alignItems: "center", gap: "4px",
-                        fontSize: "13px", fontFamily: "'DM Sans', sans-serif",
-                        color: "#e8c84a", fontWeight: 700,
-                      }}>
-                        <span style={{ fontSize: "11px" }}>★</span>{ratingDisplay}
-                      </span>
-                      <Dot />
-                    </>
+                    <span style={{
+                      display: "flex", alignItems: "center", gap: "4px",
+                      background: "rgba(232,200,74,0.1)",
+                      border: "1px solid rgba(232,200,74,0.2)",
+                      borderRadius: "6px",
+                      padding: "3px 9px",
+                      fontSize: "12px", fontWeight: 700,
+                      color: "#e8c84a",
+                      fontFamily: "'DM Sans', sans-serif",
+                    }}>
+                      <Star size={10} style={{ fill: "#e8c84a" }} />
+                      {ratingDisplay}
+                    </span>
                   )}
                   {yearDisplay && (
-                    <>
-                      <span style={{ fontSize: "13px", color: "rgba(255,255,255,0.4)", fontFamily: "'DM Sans', sans-serif" }}>
-                        {yearDisplay}
-                      </span>
-                      {genresDisplay.length > 0 && <Dot />}
-                    </>
-                  )}
-                  {genresDisplay.map((g, i) => (
-                    <span key={g} style={{ display: "flex", alignItems: "center", fontSize: "13px", color: "rgba(255,255,255,0.4)", fontFamily: "'DM Sans', sans-serif" }}>
-                      {g}{i < genresDisplay.length - 1 && <Dot />}
+                    <span style={{
+                      display: "flex", alignItems: "center", gap: "4px",
+                      background: "rgba(255,255,255,0.05)",
+                      border: "1px solid rgba(255,255,255,0.08)",
+                      borderRadius: "6px",
+                      padding: "3px 9px",
+                      fontSize: "12px",
+                      color: "rgba(255,255,255,0.45)",
+                      fontFamily: "'DM Sans', sans-serif",
+                    }}>
+                      <Calendar size={10} />
+                      {yearDisplay}
                     </span>
-                  ))}
-                  <Dot />
+                  )}
                   <span style={{
-                    fontSize: "9px", letterSpacing: "0.1em",
-                    textTransform: "uppercase", color: "#9D97E8",
-                    background: "rgba(127,119,221,0.1)",
+                    background: "rgba(127,119,221,0.12)",
                     border: "1px solid rgba(127,119,221,0.22)",
-                    borderRadius: "4px", padding: "2px 7px",
-                    fontWeight: 600, fontFamily: "'DM Sans', sans-serif",
+                    borderRadius: "6px",
+                    padding: "3px 9px",
+                    fontSize: "11px", fontWeight: 600,
+                    color: "#9D97E8",
+                    letterSpacing: "0.06em",
+                    textTransform: "uppercase",
+                    fontFamily: "'DM Sans', sans-serif",
                   }}>
                     {details.type === "tv" ? "Series" : "Movie"}
                   </span>
+                  {genresDisplay.map((g) => (
+                    <span key={g} style={{
+                      background: "rgba(255,255,255,0.04)",
+                      border: "1px solid rgba(255,255,255,0.07)",
+                      borderRadius: "6px",
+                      padding: "3px 9px",
+                      fontSize: "11px",
+                      color: "rgba(255,255,255,0.35)",
+                      fontFamily: "'DM Sans', sans-serif",
+                    }}>
+                      {g}
+                    </span>
+                  ))}
                 </div>
 
                 {details.overview && (
                   <p style={{
                     fontSize: "13.5px",
-                    color: "rgba(255,255,255,0.42)",
-                    lineHeight: 1.72,
+                    color: "rgba(255,255,255,0.4)",
+                    lineHeight: 1.75,
                     fontFamily: "'DM Sans', sans-serif",
                   }}>
                     {details.overview}
@@ -674,27 +743,27 @@ export default function WatchPage() {
               </div>
             </div>
 
+            {/* Divider */}
+            <div style={{
+              height: "1px",
+              background: "linear-gradient(to right, transparent, rgba(127,119,221,0.15) 30%, rgba(127,119,221,0.15) 70%, transparent)",
+              marginBottom: "22px",
+            }} />
+
             {/* Actions */}
             <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
               <button
+                className="detail-btn"
                 onClick={() => id && setLocation(`/title/${id}?type=${typeParam}`)}
                 style={{
                   display: "flex", alignItems: "center", gap: "7px",
-                  padding: "10px 20px", borderRadius: "10px",
+                  padding: "10px 20px", borderRadius: "11px",
                   fontSize: "13px", fontWeight: 500,
-                  background: "rgba(255,255,255,0.05)",
-                  color: "rgba(255,255,255,0.5)",
-                  border: "1px solid rgba(255,255,255,0.08)",
+                  background: "rgba(127,119,221,0.08)",
+                  color: "rgba(255,255,255,0.55)",
+                  border: "1px solid rgba(127,119,221,0.14)",
                   cursor: "pointer", transition: "all 0.2s",
                   fontFamily: "'DM Sans', sans-serif",
-                }}
-                onMouseEnter={(e) => {
-                  (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.09)";
-                  (e.currentTarget as HTMLElement).style.color = "#fff";
-                }}
-                onMouseLeave={(e) => {
-                  (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.05)";
-                  (e.currentTarget as HTMLElement).style.color = "rgba(255,255,255,0.5)";
                 }}
               >
                 <Info size={13} /> View details
@@ -704,19 +773,5 @@ export default function WatchPage() {
         </div>
       )}
     </div>
-  );
-}
-
-function Dot() {
-  return (
-    <span style={{
-      display: "inline-block",
-      width: "3px", height: "3px",
-      borderRadius: "50%",
-      background: "rgba(255,255,255,0.18)",
-      margin: "0 8px",
-      flexShrink: 0,
-      verticalAlign: "middle",
-    }} />
   );
 }
