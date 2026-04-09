@@ -320,40 +320,63 @@ export async function getStreamSources(
   const s = season ?? 1;
   const e = episode ?? 1;
 
-  const nontongoQs = new URLSearchParams();
-  if (meta?.imdbId) nontongoQs.set("imdb_id", meta.imdbId);
-  const nontongoQStr = nontongoQs.toString() ? `?${nontongoQs.toString()}` : "";
+  // ── Videasy (best: quality-switched HLS via WASM decryption) ────────────────
+  const vqQs = new URLSearchParams();
+  if (meta?.title)        vqQs.set("title",         meta.title);
+  if (meta?.year)         vqQs.set("year",           meta.year);
+  if (meta?.imdbId)       vqQs.set("imdb_id",        meta.imdbId);
+  if (meta?.totalSeasons) vqQs.set("total_seasons",  String(meta.totalSeasons));
+  const videasyPath = type === "movie"
+    ? `/api/stream/movie/${tmdbId}/videasy${vqQs.size ? `?${vqQs}` : ""}`
+    : `/api/stream/tv/${tmdbId}/${s}/${e}/videasy${vqQs.size ? `?${vqQs}` : ""}`;
+
+  // ── NontonGo (HLS via curl extraction chain) ────────────────────────────────
+  const nqQs = new URLSearchParams();
+  if (meta?.imdbId) nqQs.set("imdb_id", meta.imdbId);
   const nontongoPath = type === "movie"
-    ? `/api/stream/movie/${tmdbId}/nontongo${nontongoQStr}`
+    ? `/api/stream/movie/${tmdbId}/nontongo${nqQs.size ? `?${nqQs}` : ""}`
     : `/api/stream/tv/${tmdbId}/${s}/${e}/nontongo`;
 
+  // ── MovieBox (MP4 CDN, expires in ~60 min) ───────────────────────────────────
   const mbQs = new URLSearchParams();
   if (meta?.title) mbQs.set("title", meta.title);
   if (meta?.year)  mbQs.set("year",  meta.year);
-  const mbQStr = mbQs.toString() ? `?${mbQs.toString()}` : "";
   const movieboxPath = type === "movie"
-    ? `/api/stream/movie/${tmdbId}/moviebox${mbQStr}`
-    : `/api/stream/tv/${tmdbId}/${s}/${e}/moviebox${mbQStr}`;
+    ? `/api/stream/movie/${tmdbId}/moviebox${mbQs.size ? `?${mbQs}` : ""}`
+    : `/api/stream/tv/${tmdbId}/${s}/${e}/moviebox${mbQs.size ? `?${mbQs}` : ""}`;
 
-  const [nontongoRes, movieboxRes] = await Promise.allSettled([
+  // ── VidSrc (embed iframe — last resort, near-universal coverage) ─────────────
+  const vidsrcPath = type === "movie"
+    ? `/api/stream/movie/${tmdbId}/vidsrc`
+    : `/api/stream/tv/${tmdbId}/${s}/${e}/vidsrc`;
+
+  // Fire all four in parallel
+  const [videasyRes, nontongoRes, movieboxRes, vidsrcRes] = await Promise.allSettled([
+    fetch(videasyPath),
     fetch(nontongoPath),
     fetch(movieboxPath),
+    fetch(vidsrcPath),
   ]);
 
-  const nontongoSources: StreamSource[] = [];
-  if (nontongoRes.status === "fulfilled" && nontongoRes.value.ok) {
-    const data: StreamResponse = await nontongoRes.value.json();
-    nontongoSources.push(...(data.sources ?? []));
+  async function extractSources(res: PromiseSettledResult<Response>): Promise<StreamSource[]> {
+    if (res.status !== "fulfilled" || !res.value.ok) return [];
+    try {
+      const data: StreamResponse = await res.value.json();
+      return data.sources ?? [];
+    } catch {
+      return [];
+    }
   }
 
-  const movieboxSources: StreamSource[] = [];
-  if (movieboxRes.status === "fulfilled" && movieboxRes.value.ok) {
-    const data: StreamResponse = await movieboxRes.value.json();
-    movieboxSources.push(...(data.sources ?? []));
-  }
+  const [videasy, nontongo, moviebox, vidsrc] = await Promise.all([
+    extractSources(videasyRes),
+    extractSources(nontongoRes),
+    extractSources(movieboxRes),
+    extractSources(vidsrcRes),
+  ]);
 
-  // Order: HLS sources first (NontonGo), then MP4 (MovieBox)
-  const allSources = [...nontongoSources, ...movieboxSources];
+  // Source priority: Videasy HLS → NontonGo HLS → MovieBox MP4 → VidSrc embed
+  const allSources: StreamSource[] = [...videasy, ...nontongo, ...moviebox, ...vidsrc];
 
   if (allSources.length === 0) {
     throw new Error("Stream unavailable — no sources returned");

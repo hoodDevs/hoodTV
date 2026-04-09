@@ -5,7 +5,7 @@ import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from routers import health, stream, proxy, nontongo, moviebox, ytproxy
+from routers import health, stream, proxy, nontongo, moviebox, ytproxy, vidsrc
 
 app = FastAPI(title="hoodTV API", version="2.0.0")
 
@@ -23,6 +23,7 @@ app.include_router(stream.router,    prefix="/api")
 app.include_router(proxy.router,     prefix="/api")
 app.include_router(nontongo.router,  prefix="/api")
 app.include_router(moviebox.router,  prefix="/api")
+app.include_router(vidsrc.router,    prefix="/api")
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8080))

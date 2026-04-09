@@ -98,7 +98,7 @@ _CURL_UA = (
 )
 
 
-def _curl_get(url: str, referer: Optional[str] = None, timeout: int = 15) -> str:
+def _curl_get(url: str, referer: Optional[str] = None, timeout: int = 8) -> str:
     """Fetch URL body via curl. Returns empty string on failure."""
     args = [
         "curl", "-s",
@@ -111,13 +111,13 @@ def _curl_get(url: str, referer: Optional[str] = None, timeout: int = 15) -> str
         args += ["-H", f"Referer: {referer}"]
     args.append(url)
     try:
-        result = subprocess.run(args, capture_output=True, timeout=timeout + 5)
+        result = subprocess.run(args, capture_output=True, timeout=timeout + 3)
         return result.stdout.decode("utf-8", "replace")
     except Exception:
         return ""
 
 
-def _curl_location(url: str, referer: Optional[str] = None, timeout: int = 15) -> Optional[str]:
+def _curl_location(url: str, referer: Optional[str] = None, timeout: int = 8) -> Optional[str]:
     """HEAD request → return Location header value on 3xx, else None."""
     args = [
         "curl", "-sI",
@@ -128,7 +128,7 @@ def _curl_location(url: str, referer: Optional[str] = None, timeout: int = 15) -
         args += ["-H", f"Referer: {referer}"]
     args.append(url)
     try:
-        result = subprocess.run(args, capture_output=True, timeout=timeout + 5)
+        result = subprocess.run(args, capture_output=True, timeout=timeout + 3)
         headers = result.stdout.decode("utf-8", "replace")
         m = re.search(r"^[Ll]ocation:\s*(.+)$", headers, re.MULTILINE)
         return m.group(1).strip() if m else None

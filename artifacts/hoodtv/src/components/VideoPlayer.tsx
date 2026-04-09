@@ -17,7 +17,27 @@ interface Props {
 
 type Level = { height: number; bitrate: number };
 
-export function VideoPlayer({ src, poster, tracks = [], onReady, onError, sourceType }: Props) {
+/** Thin router — delegates to the correct player implementation. */
+export function VideoPlayer(props: Props) {
+  if (props.sourceType === "embed") {
+    return (
+      <div style={{ position: "relative", width: "100%", height: "100%", background: "#000" }}>
+        <iframe
+          src={props.src}
+          style={{ width: "100%", height: "100%", border: "none", display: "block" }}
+          allowFullScreen
+          allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
+          referrerPolicy="no-referrer"
+          title="Video player"
+        />
+      </div>
+    );
+  }
+  return <HlsMp4Player {...props} />;
+}
+
+/** HLS + MP4 player — all hooks live here, never renders for embed sources. */
+function HlsMp4Player({ src, poster, tracks = [], onReady, onError, sourceType }: Props) {
   const videoRef      = useRef<HTMLVideoElement>(null);
   const hlsRef        = useRef<Hls | null>(null);
   const wrapRef       = useRef<HTMLDivElement>(null);
