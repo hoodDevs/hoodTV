@@ -62,19 +62,21 @@ export function VideoPlayer({ src, poster, tracks = [], onReady, onError }: Vide
 
     if (Hls.isSupported()) {
       const hls = new Hls({
-        enableWorker: true,
+        enableWorker: false,
         lowLatencyMode: false,
         backBufferLength: 30,
-        maxBufferLength: 60,
-        maxMaxBufferLength: 120,
-        maxBufferSize: 60 * 1000 * 1000,
-        startLevel: -1,
+        maxBufferLength: 30,
+        maxMaxBufferLength: 60,
+        maxBufferSize: 30 * 1000 * 1000,
+        startLevel: 0,
         abrEwmaDefaultEstimate: 1_500_000,
-        fragLoadingMaxRetry: 6,
-        manifestLoadingMaxRetry: 4,
-        levelLoadingMaxRetry: 4,
-        fragLoadingRetryDelay: 1000,
+        fragLoadingMaxRetry: 4,
+        manifestLoadingMaxRetry: 3,
+        levelLoadingMaxRetry: 3,
+        fragLoadingRetryDelay: 500,
         manifestLoadingRetryDelay: 500,
+        progressive: true,
+        testBandwidth: false,
       });
 
       hlsRef.current = hls;

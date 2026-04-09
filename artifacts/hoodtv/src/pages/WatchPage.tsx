@@ -378,12 +378,19 @@ export default function WatchPage() {
                 </p>
                 <p style={{
                   fontSize: "13px", color: "rgba(255,255,255,0.32)",
-                  marginBottom: "28px", lineHeight: 1.65,
+                  marginBottom: "8px", lineHeight: 1.65,
                   fontFamily: "'DM Sans', sans-serif",
                 }}>
                   {errorMsg || "We couldn't find a working stream right now."}
                 </p>
-                <div style={{ display: "flex", gap: "10px", justifyContent: "center" }}>
+                <p style={{
+                  fontSize: "12px", color: "rgba(255,255,255,0.2)",
+                  marginBottom: "28px", lineHeight: 1.55,
+                  fontFamily: "'DM Sans', sans-serif",
+                }}>
+                  If you're viewing in an embedded preview, open the app in a full browser tab for video playback.
+                </p>
+                <div style={{ display: "flex", gap: "10px", justifyContent: "center", flexWrap: "wrap" }}>
                   <button className="retry-btn" onClick={retry} style={{
                     display: "flex", alignItems: "center", gap: "7px",
                     padding: "11px 22px", borderRadius: "12px",
@@ -396,6 +403,24 @@ export default function WatchPage() {
                   }}>
                     <RotateCcw size={13} /> Try again
                   </button>
+                  {sources.length > 0 && (
+                    <a
+                      href={`${window.location.origin}${sources[0].url}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{
+                        display: "flex", alignItems: "center", gap: "7px",
+                        padding: "11px 22px", borderRadius: "12px",
+                        fontSize: "13px", fontWeight: 500,
+                        background: "rgba(255,255,255,0.07)", color: "rgba(255,255,255,0.6)",
+                        border: "1px solid rgba(255,255,255,0.12)", cursor: "pointer",
+                        textDecoration: "none",
+                        fontFamily: "'DM Sans', sans-serif",
+                      }}
+                    >
+                      Open stream ↗
+                    </a>
+                  )}
                   <button className="goback-btn" onClick={goBack} style={{
                     padding: "11px 22px", borderRadius: "12px",
                     fontSize: "13px", fontWeight: 500,
