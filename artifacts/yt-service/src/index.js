@@ -268,50 +268,79 @@ app.get("/api/yt/music/stream", async (req, res) => {
  * Supports Range requests for scrubbing/seeking.
  */
 app.get("/api/yt/video/stream", async (req, res) => {
-  const { videoId, quality = "720p" } = req.query;
+  const { videoId } = req.query;
   if (!videoId) return res.status(400).json({ error: "videoId required" });
 
   try {
-    // Use regular yt.getInfo() — has muxed video+audio formats (music info only has audio)
+    const yt = await getYT();
     const videoInfo = await getVideoInfo(videoId);
-
     const rangeHeader = req.headers["range"];
-    // Only muxed (video+audio) formats exist at 360p (itag 18). Adaptive-only
-    // formats are video-only; there is no muxed 720p. Always pick "best" to
-    // select the highest-quality muxed stream that actually has audio.
-    const downloadOpts = {
-      type: "video+audio",
-      quality: "best",
-      format: "any",
-    };
 
-    if (rangeHeader) {
-      const [, start, end] = /bytes=(\d+)-(\d*)/.exec(rangeHeader) || [];
-      if (start !== undefined) {
-        downloadOpts.range = {
-          start: parseInt(start, 10),
-          end: end ? parseInt(end, 10) : undefined,
-        };
-      }
+    // Pick best muxed (video+audio) format — prefer 720p (itag 22), fall back to 360p (itag 18)
+    const muxedFormats = videoInfo.streaming_data?.formats || [];
+    const fmt = muxedFormats.find((f) => f.itag === 22)
+             || muxedFormats.find((f) => f.itag === 18)
+             || muxedFormats[0];
+
+    if (!fmt) return res.status(404).json({ error: "No muxed video format available" });
+
+    // Decipher the signed CDN URL (includes n-param transformation)
+    const player = yt.session?.player;
+    const cdnUrl = await fmt.decipher(player);
+    if (!cdnUrl) return res.status(404).json({ error: "Failed to decipher stream URL" });
+
+    console.log(`[video/stream] ${videoId} itag=${fmt.itag} quality=${fmt.quality_label || fmt.quality} range=${rangeHeader || "none"}`);
+
+    // Fetch from YouTube CDN with browser-matching headers so VEVO / signed URLs work
+    const fetchHeaders = {
+      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+      "Referer": "https://www.youtube.com/",
+      "Origin": "https://www.youtube.com/",
+      "Accept": "*/*",
+      "Accept-Language": "en-US,en;q=0.9",
+      "Accept-Encoding": "identity",
+    };
+    if (rangeHeader) fetchHeaders["Range"] = rangeHeader;
+
+    const cdnResp = await fetch(cdnUrl, { headers: fetchHeaders });
+
+    if (!cdnResp.ok) {
+      console.error(`[video/stream] CDN ${cdnResp.status} for ${videoId}`);
+      return res.status(502).json({ error: `YouTube CDN returned ${cdnResp.status}` });
     }
 
-    console.log(`[video/stream] ${videoId} quality=${quality} range=${rangeHeader || "none"}`);
-
-    const stream = await videoInfo.download(downloadOpts);
-
-    // Determine mime type from streaming data (prefer muxed format)
-    const sd = videoInfo.streaming_data;
-    const videoFmt = (sd?.formats || []).find((f) => f.has_video && f.has_audio)
-                  || (sd?.adaptive_formats || []).find((f) => f.has_video);
-    const mimeType = videoFmt?.mime_type?.split(";")[0] || "video/mp4";
-
+    // Forward relevant CDN headers
+    const mimeType = fmt.mime_type?.split(";")[0] || "video/mp4";
     res.setHeader("Content-Type", mimeType);
     res.setHeader("Accept-Ranges", "bytes");
     res.setHeader("Access-Control-Allow-Origin", "*");
     res.setHeader("Cache-Control", "no-store");
+
+    const contentLength = cdnResp.headers.get("content-length");
+    const contentRange  = cdnResp.headers.get("content-range");
+    if (contentLength) res.setHeader("Content-Length", contentLength);
+    if (contentRange)  res.setHeader("Content-Range", contentRange);
+
     res.status(rangeHeader ? 206 : 200);
 
-    await pipeReadableStream(stream, res);
+    // Stream CDN response body to client
+    const reader = cdnResp.body.getReader();
+    req.on("close", () => reader.cancel().catch(() => {}));
+
+    const pump = async () => {
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          if (!res.write(value)) await new Promise((r) => res.once("drain", r));
+        }
+        res.end();
+      } catch {
+        res.end();
+      }
+    };
+    pump();
+
   } catch (err) {
     console.error("[video/stream] error:", err.message);
     if (!res.headersSent) res.status(500).json({ error: err.message });
