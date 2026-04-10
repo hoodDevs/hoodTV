@@ -1,18 +1,239 @@
-import { useState } from "react";
-import { ExternalLink } from "lucide-react";
+/**
+ * MusicVideoPlayer — hoodTV themed video player
+ *
+ * Uses the YouTube IFrame Player API for reliable video streaming, with a
+ * fully custom themed control overlay. YouTube controls are hidden; all
+ * interaction goes through our own UI.
+ */
+import { useRef, useState, useEffect, useCallback, useId } from "react";
+import {
+  Play, Pause, Volume2, VolumeX, Maximize, Minimize,
+  ExternalLink,
+} from "lucide-react";
 
 interface Props {
   videoId: string;
   title?: string;
 }
 
-export function MusicVideoPlayer({ videoId, title }: Props) {
-  const [loaded, setLoaded] = useState(false);
+declare global {
+  interface Window {
+    YT: any;
+    onYouTubeIframeAPIReady: () => void;
+  }
+}
 
-  const embedUrl = `https://www.youtube.com/embed/${videoId}?autoplay=1&rel=0&modestbranding=1`;
+function fmt(s: number) {
+  if (!isFinite(s) || isNaN(s) || s < 0) return "0:00";
+  const m = Math.floor(s / 60);
+  const sec = Math.floor(s % 60);
+  return `${m}:${sec.toString().padStart(2, "0")}`;
+}
+
+let ytApiLoaded = false;
+let ytApiCallbacks: Array<() => void> = [];
+
+function loadYtApi(): Promise<void> {
+  return new Promise((resolve) => {
+    if (ytApiLoaded && window.YT?.Player) { resolve(); return; }
+    ytApiCallbacks.push(resolve);
+    if (document.getElementById("yt-iframe-api")) return;
+    const prevReady = window.onYouTubeIframeAPIReady;
+    window.onYouTubeIframeAPIReady = () => {
+      ytApiLoaded = true;
+      if (prevReady) prevReady();
+      ytApiCallbacks.forEach((cb) => cb());
+      ytApiCallbacks = [];
+    };
+    const tag = document.createElement("script");
+    tag.id = "yt-iframe-api";
+    tag.src = "https://www.youtube.com/iframe_api";
+    document.head.appendChild(tag);
+  });
+}
+
+export function MusicVideoPlayer({ videoId, title }: Props) {
+  const uid = useId().replace(/:/g, "");
+  const iframeContainerId = `ytplayer-${uid}`;
+
+  const containerRef = useRef<HTMLDivElement>(null);
+  const progressRef = useRef<HTMLDivElement>(null);
+  const playerRef = useRef<any>(null);
+  const rafRef = useRef<number | null>(null);
+  const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const [ready, setReady] = useState(false);
+  const [playing, setPlaying] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const [volume, setVolume] = useState(80);
+  const [muted, setMuted] = useState(false);
+  const [fullscreen, setFullscreen] = useState(false);
+  const [showControls, setShowControls] = useState(true);
+  const [seeking, setSeeking] = useState(false);
+  const [playerError, setPlayerError] = useState(false);
+
+  // Tick: update current time via RAF
+  const startTick = useCallback(() => {
+    const tick = () => {
+      const p = playerRef.current;
+      if (p?.getCurrentTime) {
+        const ct = p.getCurrentTime() || 0;
+        setCurrentTime(ct);
+        if (!duration) {
+          const d = p.getDuration?.() || 0;
+          if (d > 0) setDuration(d);
+        }
+      }
+      rafRef.current = requestAnimationFrame(tick);
+    };
+    if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    rafRef.current = requestAnimationFrame(tick);
+  }, [duration]);
+
+  const stopTick = useCallback(() => {
+    if (rafRef.current) { cancelAnimationFrame(rafRef.current); rafRef.current = null; }
+  }, []);
+
+  // Initialise / re-initialise player when videoId changes
+  useEffect(() => {
+    let destroyed = false;
+    setReady(false);
+    setPlaying(false);
+    setCurrentTime(0);
+    setDuration(0);
+    setPlayerError(false);
+    stopTick();
+
+    loadYtApi().then(() => {
+      if (destroyed) return;
+      if (playerRef.current) {
+        try { playerRef.current.destroy(); } catch {}
+        playerRef.current = null;
+      }
+
+      playerRef.current = new window.YT.Player(iframeContainerId, {
+        videoId,
+        height: "100%",
+        width: "100%",
+        playerVars: {
+          controls: 0,
+          disablekb: 1,
+          modestbranding: 1,
+          rel: 0,
+          showinfo: 0,
+          iv_load_policy: 3,
+          cc_load_policy: 0,
+          playsinline: 1,
+          autoplay: 1,
+          origin: window.location.origin,
+        },
+        events: {
+          onReady: (e: any) => {
+            if (destroyed) return;
+            const d = e.target.getDuration?.() || 0;
+            setDuration(d > 0 ? d : 0);
+            setVolume(e.target.getVolume?.() ?? 80);
+            setMuted(e.target.isMuted?.() ?? false);
+            setReady(true);
+          },
+          onStateChange: (e: any) => {
+            if (destroyed) return;
+            // -1=unstarted, 0=ended, 1=playing, 2=paused, 3=buffering, 5=cued
+            const s = e.data;
+            if (s === 1) { setPlaying(true); startTick(); }
+            else if (s === 2 || s === 0) { setPlaying(false); stopTick(); }
+            else if (s === 3) { /* buffering */ }
+            if (s === 1 || s === 3) {
+              const dur = e.target.getDuration?.() || 0;
+              if (dur > 0) setDuration(dur);
+            }
+          },
+          onError: () => {
+            if (destroyed) return;
+            setPlayerError(true);
+          },
+        },
+      });
+    });
+
+    return () => {
+      destroyed = true;
+      stopTick();
+    };
+  }, [videoId]);
+
+  // Fullscreen change listener
+  useEffect(() => {
+    const onFS = () => setFullscreen(!!document.fullscreenElement);
+    document.addEventListener("fullscreenchange", onFS);
+    return () => document.removeEventListener("fullscreenchange", onFS);
+  }, []);
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement)?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA") return;
+      const p = playerRef.current;
+      if (!p) return;
+      if (e.code === "Space") { e.preventDefault(); playing ? p.pauseVideo() : p.playVideo(); }
+      if (e.code === "KeyF") toggleFullscreen();
+      if (e.code === "KeyM") toggleMute();
+      if (e.code === "ArrowLeft") p.seekTo(Math.max(0, (p.getCurrentTime?.() || 0) - 10), true);
+      if (e.code === "ArrowRight") p.seekTo(Math.min(duration, (p.getCurrentTime?.() || 0) + 10), true);
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [playing, duration]);
+
+  const resetHideTimer = useCallback(() => {
+    setShowControls(true);
+    if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
+    hideTimerRef.current = setTimeout(() => setShowControls(false), 3200);
+  }, []);
+
+  const togglePlay = useCallback(() => {
+    const p = playerRef.current;
+    if (!p) return;
+    if (playing) p.pauseVideo();
+    else p.playVideo();
+  }, [playing]);
+
+  const toggleMute = useCallback(() => {
+    const p = playerRef.current;
+    if (!p) return;
+    if (muted) { p.unMute(); setMuted(false); }
+    else { p.mute(); setMuted(true); }
+  }, [muted]);
+
+  const toggleFullscreen = useCallback(async () => {
+    const el = containerRef.current;
+    if (!el) return;
+    try {
+      if (!document.fullscreenElement) await el.requestFullscreen();
+      else await document.exitFullscreen();
+    } catch {}
+  }, []);
+
+  const seekTo = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    const bar = progressRef.current;
+    const p = playerRef.current;
+    if (!bar || !p || !duration) return;
+    const rect = bar.getBoundingClientRect();
+    const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+    p.seekTo(pct * duration, true);
+    setSeeking(false);
+  }, [duration]);
+
+  const pct = duration > 0 ? (currentTime / duration) * 100 : 0;
 
   return (
     <div
+      ref={containerRef}
+      onMouseMove={resetHideTimer}
+      onMouseLeave={() => !fullscreen && setShowControls(false)}
+      onClick={togglePlay}
       style={{
         position: "relative",
         background: "#000",
@@ -20,94 +241,228 @@ export function MusicVideoPlayer({ videoId, title }: Props) {
         overflow: "hidden",
         aspectRatio: "16/9",
         width: "100%",
+        cursor: showControls ? "default" : "none",
+        userSelect: "none",
+        boxShadow: "0 0 0 1px rgba(127,119,221,0.15), 0 20px 60px rgba(0,0,0,0.8)",
       }}
     >
-      {/* Loading shimmer */}
-      {!loaded && (
-        <div
-          style={{
-            position: "absolute",
-            inset: 0,
-            background: "linear-gradient(90deg, #111 25%, #1a1a2e 50%, #111 75%)",
-            backgroundSize: "200% 100%",
-            animation: "mv-shimmer 1.5s infinite",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-          }}
-        >
-          <div
-            style={{
-              width: 52,
-              height: 52,
-              borderRadius: "50%",
-              border: "3px solid rgba(255,255,255,0.08)",
-              borderTopColor: "#7F77DD",
-              animation: "mv-spin 0.8s linear infinite",
-            }}
-          />
-        </div>
-      )}
-
-      <iframe
-        src={embedUrl}
-        title={title || "Music Video"}
-        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-        allowFullScreen
-        onLoad={() => setLoaded(true)}
+      {/* YouTube iframe container — placed here; YT API replaces this div */}
+      <div
+        id={iframeContainerId}
         style={{
-          width: "100%",
-          height: "100%",
-          border: "none",
-          display: "block",
-          position: "absolute",
-          inset: 0,
-          opacity: loaded ? 1 : 0,
-          transition: "opacity 0.3s ease",
+          position: "absolute", inset: 0,
+          width: "100%", height: "100%",
+          pointerEvents: "none",
         }}
       />
 
-      <a
-        href={`https://www.youtube.com/watch?v=${videoId}`}
-        target="_blank"
-        rel="noopener noreferrer"
+      {/* Invisible click-shield over the iframe (prevents default YT click behaviour) */}
+      <div
         style={{
-          position: "absolute",
-          top: 12,
-          right: 12,
-          background: "rgba(0,0,0,0.6)",
-          backdropFilter: "blur(8px)",
-          color: "#ccc",
-          borderRadius: 8,
-          padding: "6px 12px",
-          fontSize: 12,
-          fontWeight: 600,
-          textDecoration: "none",
-          display: "flex",
-          alignItems: "center",
-          gap: 6,
-          border: "1px solid rgba(255,255,255,0.1)",
-          transition: "all 0.2s",
-          zIndex: 5,
-          opacity: loaded ? 1 : 0,
+          position: "absolute", inset: 0,
+          zIndex: 1, cursor: showControls ? "default" : "none",
         }}
-        onMouseEnter={(e) => {
-          (e.currentTarget as HTMLAnchorElement).style.color = "#fff";
-          (e.currentTarget as HTMLAnchorElement).style.background = "rgba(0,0,0,0.85)";
-        }}
-        onMouseLeave={(e) => {
-          (e.currentTarget as HTMLAnchorElement).style.color = "#ccc";
-          (e.currentTarget as HTMLAnchorElement).style.background = "rgba(0,0,0,0.6)";
+        onClick={togglePlay}
+        onMouseMove={resetHideTimer}
+      />
+
+      {/* Loading spinner */}
+      {!ready && !playerError && (
+        <div style={{
+          position: "absolute", inset: 0, zIndex: 2,
+          display: "flex", flexDirection: "column",
+          alignItems: "center", justifyContent: "center",
+          gap: 16, background: "rgba(5,5,12,0.9)",
+          pointerEvents: "none",
+        }}>
+          <div style={{
+            width: 60, height: 60, borderRadius: "50%",
+            border: "3px solid rgba(127,119,221,0.18)",
+            borderTopColor: "#7F77DD",
+            animation: "mv-spin 0.75s linear infinite",
+          }} />
+          <span style={{
+            color: "rgba(192,189,245,0.55)", fontSize: 13,
+            letterSpacing: "0.06em", fontFamily: "DM Sans, sans-serif",
+          }}>
+            Loading…
+          </span>
+        </div>
+      )}
+
+      {/* Error state */}
+      {playerError && (
+        <div
+          style={{
+            position: "absolute", inset: 0, zIndex: 2,
+            display: "flex", flexDirection: "column",
+            alignItems: "center", justifyContent: "center",
+            background: "#05050c", gap: 18,
+          }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div style={{
+            width: 56, height: 56, borderRadius: "50%",
+            background: "rgba(127,119,221,0.1)",
+            border: "1px solid rgba(127,119,221,0.25)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            fontSize: 24, opacity: 0.8,
+          }}>⚠</div>
+          <div style={{
+            color: "rgba(255,255,255,0.45)", fontSize: 14,
+            fontFamily: "DM Sans, sans-serif", textAlign: "center",
+          }}>
+            This video isn't available for playback
+          </div>
+          <a
+            href={`https://www.youtube.com/watch?v=${videoId}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{
+              display: "flex", alignItems: "center", gap: 7,
+              background: "rgba(255,255,255,0.06)",
+              border: "1px solid rgba(255,255,255,0.12)",
+              color: "#888", fontSize: 13, fontWeight: 600,
+              padding: "9px 22px", borderRadius: 22, cursor: "pointer",
+              textDecoration: "none", fontFamily: "DM Sans, sans-serif",
+            }}
+          >
+            <ExternalLink size={14} /> Open in YouTube
+          </a>
+        </div>
+      )}
+
+      {/* Big play icon when paused */}
+      {ready && !playing && !playerError && (
+        <div style={{
+          position: "absolute", inset: 0, zIndex: 2,
+          display: "flex", alignItems: "center", justifyContent: "center",
+          pointerEvents: "none",
+        }}>
+          <div style={{
+            width: 80, height: 80, borderRadius: "50%",
+            background: "rgba(127,119,221,0.82)",
+            backdropFilter: "blur(10px)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            boxShadow: "0 0 60px rgba(127,119,221,0.55), 0 0 120px rgba(127,119,221,0.2)",
+          }}>
+            <Play size={36} color="#fff" fill="#fff" style={{ marginLeft: 6 }} />
+          </div>
+        </div>
+      )}
+
+      {/* Controls overlay */}
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          position: "absolute", bottom: 0, left: 0, right: 0,
+          zIndex: 3,
+          background: "linear-gradient(to top, rgba(5,5,12,0.98) 0%, rgba(5,5,12,0.6) 55%, transparent 100%)",
+          padding: "60px 20px 20px",
+          opacity: showControls && !playerError ? 1 : 0,
+          transition: "opacity 0.25s ease",
+          pointerEvents: showControls && !playerError ? "auto" : "none",
         }}
       >
-        <ExternalLink size={13} /> YouTube
-      </a>
+        {/* Progress bar */}
+        <div
+          ref={progressRef}
+          onClick={seekTo}
+          onMouseDown={() => setSeeking(true)}
+          onMouseUp={() => setSeeking(false)}
+          style={{
+            position: "relative",
+            height: seeking ? 6 : 4,
+            borderRadius: 4,
+            background: "rgba(255,255,255,0.12)",
+            marginBottom: 14,
+            cursor: "pointer",
+            transition: "height 0.15s ease",
+          }}
+        >
+          <div style={{
+            position: "absolute", left: 0, top: 0, bottom: 0,
+            width: `${pct}%`,
+            background: "linear-gradient(90deg, #7F77DD 0%, #c0bdf5 100%)",
+            borderRadius: 4,
+            transition: seeking ? "none" : "width 0.1s linear",
+          }}>
+            <div style={{
+              position: "absolute", right: -8, top: "50%",
+              transform: "translateY(-50%)",
+              width: 17, height: 17, borderRadius: "50%",
+              background: "#c0bdf5",
+              boxShadow: "0 0 14px rgba(127,119,221,1), 0 0 30px rgba(127,119,221,0.4)",
+            }} />
+          </div>
+        </div>
+
+        {/* Controls row */}
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <button
+            onClick={togglePlay}
+            style={{
+              background: "none", border: "none", color: "#fff",
+              cursor: "pointer", padding: "4px 6px",
+              display: "flex", alignItems: "center", borderRadius: 6,
+            }}
+          >
+            {playing ? <Pause size={22} fill="#fff" /> : <Play size={22} fill="#fff" style={{ marginLeft: 2 }} />}
+          </button>
+
+          <span style={{
+            color: "rgba(255,255,255,0.6)", fontSize: 12,
+            fontFamily: "monospace", letterSpacing: "0.05em", whiteSpace: "nowrap",
+          }}>
+            {fmt(currentTime)} / {fmt(duration)}
+          </span>
+
+          <div style={{ flex: 1 }} />
+
+          <button
+            onClick={toggleMute}
+            style={{
+              background: "none", border: "none",
+              color: "rgba(255,255,255,0.75)", cursor: "pointer",
+              padding: 4, display: "flex", alignItems: "center", borderRadius: 6,
+            }}
+          >
+            {muted ? <VolumeX size={19} /> : <Volume2 size={19} />}
+          </button>
+          <input
+            type="range" min={0} max={100} step={1}
+            value={muted ? 0 : volume}
+            onChange={(e) => {
+              const val = parseInt(e.target.value);
+              const p = playerRef.current;
+              if (!p) return;
+              p.setVolume(val);
+              if (val === 0) { p.mute(); setMuted(true); }
+              else if (muted) { p.unMute(); setMuted(false); }
+              setVolume(val);
+            }}
+            style={{ width: 80, accentColor: "#7F77DD", cursor: "pointer" }}
+          />
+
+          <button
+            onClick={toggleFullscreen}
+            style={{
+              background: "none", border: "none",
+              color: "rgba(255,255,255,0.75)", cursor: "pointer",
+              padding: 4, display: "flex", alignItems: "center", borderRadius: 6,
+            }}
+          >
+            {fullscreen ? <Minimize size={19} /> : <Maximize size={19} />}
+          </button>
+        </div>
+      </div>
 
       <style>{`
         @keyframes mv-spin { to { transform: rotate(360deg); } }
-        @keyframes mv-shimmer {
-          0% { background-position: -200% 0; }
-          100% { background-position: 200% 0; }
+        #${iframeContainerId} iframe {
+          width: 100% !important;
+          height: 100% !important;
+          border: none !important;
         }
       `}</style>
     </div>

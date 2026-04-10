@@ -261,14 +261,9 @@ app.get("/api/yt/music/stream", async (req, res) => {
 /**
  * GET /api/yt/video/stream?videoId=xxx
  *
- * Muxed video+audio stream (itag 22 = 720p MP4, itag 18 = 360p MP4).
- *
- * Uses yt.getInfo() for proper muxed format metadata, then proxies the
- * deciphered format URL directly via fetch() with YouTube-compatible headers.
- * This bypasses YouTube.js's download() which can fail on server IPs.
- *
- * Sets Content-Range + Content-Length on all Range responses for proper
- * browser <video> seeking and duration detection.
+ * Proxies muxed video+audio (itag 22 = 720p MP4, itag 18 = 360p MP4) to
+ * the browser. Deciphers the format URL via YouTube.js player, then fetches
+ * from YouTube CDN with full range-request support for seeking.
  */
 app.get("/api/yt/video/stream", async (req, res) => {
   const { videoId } = req.query;
@@ -276,77 +271,67 @@ app.get("/api/yt/video/stream", async (req, res) => {
 
   try {
     const yt = await getYT();
-    // Use a short-lived cache (30s) so multiple range requests within the same
-    // playback session reuse the same VideoInfo and format URL, which is what
-    // YouTube's CDN expects (same URL, sequential range requests).
     const info = await getVideoInfo(videoId);
+    const muxedFormats = info.streaming_data?.formats || [];
 
-    const sd = info.streaming_data;
-    const muxedFormats = sd?.formats || [];
-
-    // Prefer 720p muxed, fall back to 360p muxed
     const fmt = muxedFormats.find((f) => f.itag === 22)
              || muxedFormats.find((f) => f.itag === 18);
 
     if (!fmt) {
-      console.error(`[stream/video] no muxed format for ${videoId}. Available itags: ${muxedFormats.map(f=>f.itag).join(',')}`);
-      return res.status(404).json({ error: "No muxed video format available for this video" });
+      const itags = muxedFormats.map((f) => f.itag).join(",");
+      console.error(`[video/stream] no muxed format for ${videoId}. itags=${itags}`);
+      return res.status(404).json({ error: "No muxed video format available" });
     }
 
+    // Decipher the URL (handles signature cipher + n-param transform)
+    const cdnUrl = await fmt.decipher(yt.session?.player);
+    if (!cdnUrl) return res.status(404).json({ error: "Decipher returned empty URL" });
+
+    const mimeType = fmt.mime_type?.split(";")[0] || "video/mp4";
     const totalLength = fmt.content_length ? parseInt(fmt.content_length, 10) : null;
     const rangeHeader = req.headers["range"];
 
-    // Parse range header to pass as options to download()
-    let rangeStart = 0;
-    let rangeEnd = totalLength !== null ? totalLength - 1 : undefined;
-
-    if (rangeHeader) {
-      const m = /bytes=(\d+)-(\d*)/.exec(rangeHeader);
-      rangeStart = m ? parseInt(m[1], 10) : 0;
-      if (m && m[2]) rangeEnd = parseInt(m[2], 10);
-    }
-
-    // YouTube.js's range-based download path (using &range= URL param) is
-    // what actually works from server IPs — the full-download path (no range)
-    // gets 403. Always pass a range to force the range-based code path.
-    const downloadOpts = {
-      itag: fmt.itag,
-      range: { start: rangeStart, end: rangeEnd },
+    const upstreamHeaders = {
+      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+      "Referer": "https://www.youtube.com/",
+      "Origin": "https://www.youtube.com",
+      "Accept": "*/*",
     };
+    if (rangeHeader) upstreamHeaders["Range"] = rangeHeader;
 
-    // Try download — if it fails (stale cached URL), clear cache and retry once.
-    let stream;
-    try {
-      stream = await info.download(downloadOpts);
-    } catch (dlErr) {
-      if (dlErr.message?.includes("non 2xx")) {
-        VIDEO_CACHE.delete(videoId);
-        const freshInfo = await getVideoInfo(videoId);
-        stream = await freshInfo.download(downloadOpts);
-      } else {
-        throw dlErr;
-      }
+    console.log(`[video/stream] ${videoId} itag=${fmt.itag} range=${rangeHeader || "none"}`);
+
+    const upstream = await fetch(cdnUrl, { headers: upstreamHeaders });
+
+    if (!upstream.ok && upstream.status !== 206) {
+      console.error(`[video/stream] CDN ${upstream.status} for ${videoId}`);
+      return res.status(502).json({ error: `CDN returned ${upstream.status}` });
     }
 
-    res.setHeader("Content-Type", "video/mp4");
+    res.setHeader("Content-Type", mimeType);
     res.setHeader("Accept-Ranges", "bytes");
     res.setHeader("Access-Control-Allow-Origin", "*");
     res.setHeader("Cache-Control", "no-store");
 
-    if (rangeHeader && totalLength !== null && rangeEnd !== undefined) {
-      res.setHeader("Content-Range", `bytes ${rangeStart}-${rangeEnd}/${totalLength}`);
-      res.setHeader("Content-Length", rangeEnd - rangeStart + 1);
-      res.status(206);
-    } else if (totalLength !== null) {
-      res.setHeader("Content-Length", totalLength);
-      res.status(200);
-    } else {
-      res.status(200);
-    }
+    const upLen = upstream.headers.get("content-length");
+    if (upLen) res.setHeader("Content-Length", upLen);
 
-    await pipeReadableStream(stream, res);
+    const upRange = upstream.headers.get("content-range");
+    if (upRange) res.setHeader("Content-Range", upRange);
+
+    res.status(upstream.status === 206 ? 206 : 200);
+
+    const reader = upstream.body.getReader();
+    const pump = () => reader.read().then(({ done, value }) => {
+      if (done) { res.end(); return; }
+      const ok = res.write(value);
+      if (ok) pump();
+      else res.once("drain", pump);
+    }).catch((e) => { console.error("[video/stream] pipe error:", e.message); res.destroy(); });
+    pump();
+    req.on("close", () => reader.cancel().catch(() => {}));
   } catch (err) {
-    console.error("[stream/video] error:", err.message);
+    console.error("[video/stream] error:", err.message);
     if (!res.headersSent) res.status(500).json({ error: err.message });
   }
 });
@@ -895,6 +880,42 @@ function mapYtVideo(v) {
     publishedAt: v.published?.text ?? "",
   };
 }
+
+/**
+ * GET /api/yt/video/url?videoId=xxx
+ *
+ * Returns the deciphered CDN URL (for debug/info). The actual playback goes
+ * through /api/yt/video/stream which proxies with range-request support.
+ */
+app.get("/api/yt/video/url", async (req, res) => {
+  const { videoId } = req.query;
+  if (!videoId) return res.status(400).json({ error: "videoId required" });
+
+  try {
+    const yt = await getYT();
+    const info = await getVideoInfo(videoId);
+    const sd = info.streaming_data;
+    const muxedFormats = sd?.formats || [];
+    const fmt = muxedFormats.find((f) => f.itag === 22)
+             || muxedFormats.find((f) => f.itag === 18);
+    if (!fmt) return res.status(404).json({ error: "No muxed video format available" });
+
+    const player = yt.session?.player;
+    const url = await fmt.decipher(player);
+    if (!url) return res.status(404).json({ error: "Decipher returned empty URL" });
+
+    res.json({
+      url,
+      mimeType: fmt.mime_type?.split(";")[0] || "video/mp4",
+      contentLength: fmt.content_length ? parseInt(fmt.content_length, 10) : null,
+      quality: fmt.quality_label || fmt.quality || "",
+      itag: fmt.itag,
+    });
+  } catch (err) {
+    console.error("[video/url] error:", err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
 
 // ─── Health Check ─────────────────────────────────────────────────────────────
 
