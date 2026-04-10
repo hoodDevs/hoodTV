@@ -37,25 +37,26 @@ Netflix-style streaming platform with dark purple theme.
 Browser
   │
   └── /api/* → Vite proxy → Python (8080) — stream extraction + HLS proxy
-                              (curl_cffi Chrome TLS fingerprinting for CDN bypass)
 
 Monitoring / Health (not in critical streaming path):
-  Go   (8090) → /health — high-perf proxy, ready for non-Cloudflare CDNs
+  Go   (8090) → /health — high-perf HLS proxy
   Rust (9000) → /health, /health/cdn, /health/status — circuit breaker
   Scala(8000) → /api/health aggregates all services
 ```
 
-> **Note**: Go's HLS proxy (stdlib net/http) cannot bypass Cloudflare TLS fingerprinting
-> that `fast.vidplus.dev` requires. Python's curl_cffi with Chrome impersonation handles
-> all streaming traffic. Go/Rust/Scala run as health/monitoring services.
+> **Note**: Go's HLS proxy (stdlib net/http) handles all m3u8/TS proxying.
+> Go/Rust/Scala run as health/monitoring services alongside the Python stream extractor.
 
 ### Python API Server (artifacts/api-server-py, port 8080)
-FastAPI + Uvicorn. Stream source extraction only.
+FastAPI + Uvicorn. Stream source extraction + HLS proxy.
 - **Routers**:
   - `routers/videasy.py` — Videasy stream source via WASM + CryptoJS decrypt; async CDN reachability validation
-  - `routers/proxy.py` — Fallback HLS proxy (now superseded by Go proxy)
+  - `routers/nontongo.py` — NontonGo HLS source (uses TMDB → IMDB ID lookup)
+  - `routers/moviebox.ts` — MovieBox MP4 source (keys via env vars)
+  - `routers/vidsrc.py` — VidSrc iframe embed fallback
+  - `routers/proxy.py` — Fallback HLS proxy
   - `routers/health.py` — health check endpoint
-- Uses `curl_cffi` with Chrome fingerprinting for Cloudflare bypass
+- Dependencies: `fastapi`, `uvicorn`, `httpx`, `moviebox-api`, `python-dotenv`
 
 ### Go HLS Proxy (artifacts/go-proxy, port 8090)
 High-performance reverse proxy for all HLS traffic — every m3u8 playlist and TS segment.
@@ -117,11 +118,13 @@ JDK-native HTTP gateway (zero external dependencies, compiles in seconds).
 - WatchPage URL carries: `title`, `type`, `year`, `total_seasons`, `season`, `episode`
 
 ## Key Config Notes
-- TMDB key injected into Vite frontend via `define` block in `vite.config.ts` (NOT .env.local)
-- Python packages managed via `uv` — virtual env at `.pythonlibs/`
+- TMDB key in Replit Secrets (`TMDB_API_KEY`); also `VITE_TMDB_API_KEY` for Vite frontend
+- MovieBox keys in env vars: `MOVIEBOX_SECRET_KEY`, `MOVIEBOX_SECRET_KEY_ALT` (optional)
+- Python packages via `pip install -r artifacts/api-server-py/requirements.txt`
 - Videasy WASM lives at `artifacts/api-server-py/videasy_wasm/module.wasm`
 - crypto-js installed in `artifacts/api-server-py/videasy_wasm/node_modules/`
 - Vite proxies: `/api/proxy` → Go (8090), `/api` → Scala (8000) → Python (8080)
+- `.env.example` → copy to `.env` for local development; `.env` is gitignored
 
 ## WatchPage Architecture
 - URL: `/watch/:tmdbId?title=...&type=movie|tv&year=...&total_seasons=N[&season=N&episode=N]`
@@ -132,11 +135,21 @@ JDK-native HTTP gateway (zero external dependencies, compiles in seconds).
 
 ## Key Commands
 
-- `pnpm --filter @workspace/hoodtv run dev` — run hoodTV frontend
-- `PORT=8080 uv run python artifacts/api-server-py/main.py` — run Python API server
+- `make setup` — install all Node.js + Python dependencies
+- `make dev` — start all six services in background
+- `make stop` — kill all background services
+- `pnpm --filter @workspace/hoodtv run dev` — run hoodTV frontend only
+- `PORT=8080 python artifacts/api-server-py/main.py` — run Python API server
 - `PORT=8090 go run artifacts/go-proxy/main.go` — run Go HLS proxy
 - `PORT=9000 cargo run --manifest-path artifacts/rust-health/Cargo.toml` — run Rust health
 - `PORT=8000 scala-cli run artifacts/scala-gateway/Gateway.scala` — run Scala gateway
-- `uv add <package>` — add Python package
+- `pip install -r artifacts/api-server-py/requirements.txt` — install Python deps
+
+## Open-Source Setup Files
+- `README.md` — project overview, architecture, setup guide
+- `.env.example` — all required/optional env vars with descriptions
+- `LICENSE` — MIT
+- `Makefile` — `make setup`, `make dev`, `make stop`, per-service targets
+- `.gitignore` — covers `.env*`, `node_modules`, build artifacts, all language caches
 
 See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and package details.
