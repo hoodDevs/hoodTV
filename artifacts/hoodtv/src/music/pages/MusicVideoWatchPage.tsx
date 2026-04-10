@@ -1,3 +1,4 @@
+import { useRef, useEffect, useCallback } from "react";
 import { useParams, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft, Eye, Clock, ExternalLink } from "lucide-react";
@@ -87,12 +88,40 @@ export function MusicVideoWatchPage() {
   const { videoId } = useParams<{ videoId: string }>();
   const [, navigate] = useLocation();
 
+  // Simple queue: track which video IDs we've visited so prev/next work
+  const historyRef = useRef<string[]>([]);
+  const prevVideoIdRef = useRef<string | undefined>(undefined);
+
+  useEffect(() => {
+    if (videoId && videoId !== prevVideoIdRef.current) {
+      if (prevVideoIdRef.current) {
+        historyRef.current = [...historyRef.current, prevVideoIdRef.current];
+        // Keep last 50 entries
+        if (historyRef.current.length > 50) historyRef.current = historyRef.current.slice(-50);
+      }
+      prevVideoIdRef.current = videoId;
+    }
+  }, [videoId]);
+
   const { data: info, isLoading, isError } = useQuery<VideoInfo>({
     queryKey: ["yt-info", videoId],
     queryFn: () => fetchVideoInfo(videoId!),
     enabled: !!videoId,
     staleTime: 10 * 60 * 1000,
   });
+
+  const handlePrev = useCallback(() => {
+    const prev = historyRef.current[historyRef.current.length - 1];
+    if (prev) {
+      historyRef.current = historyRef.current.slice(0, -1);
+      navigate(`/music/videos/${prev}`);
+    }
+  }, [navigate]);
+
+  const handleNext = useCallback(() => {
+    const next = info?.related?.[0];
+    if (next) navigate(`/music/videos/${next.id}`);
+  }, [info, navigate]);
 
   return (
     <div
@@ -167,7 +196,14 @@ export function MusicVideoWatchPage() {
               overflow: "hidden",
             }}
           >
-            <MusicVideoPlayer videoId={videoId!} title={info?.title} />
+            <MusicVideoPlayer
+              videoId={videoId!}
+              title={info?.title}
+              onPrev={handlePrev}
+              onNext={handleNext}
+              hasPrev={historyRef.current.length > 0}
+              hasNext={(info?.related?.length ?? 0) > 0}
+            />
           </motion.div>
 
           {/* Video meta */}

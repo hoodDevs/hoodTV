@@ -8,12 +8,16 @@
 import { useRef, useState, useEffect, useCallback, useId } from "react";
 import {
   Play, Pause, Volume2, VolumeX, Maximize, Minimize,
-  ExternalLink,
+  ExternalLink, SkipBack, SkipForward,
 } from "lucide-react";
 
 interface Props {
   videoId: string;
   title?: string;
+  onPrev?: () => void;
+  onNext?: () => void;
+  hasPrev?: boolean;
+  hasNext?: boolean;
 }
 
 declare global {
@@ -52,7 +56,7 @@ function loadYtApi(): Promise<void> {
   });
 }
 
-export function MusicVideoPlayer({ videoId, title }: Props) {
+export function MusicVideoPlayer({ videoId, title, onPrev, onNext, hasPrev = false, hasNext = false }: Props) {
   const uid = useId().replace(/:/g, "");
   const iframeContainerId = `ytplayer-${uid}`;
 
@@ -142,8 +146,12 @@ export function MusicVideoPlayer({ videoId, title }: Props) {
             // -1=unstarted, 0=ended, 1=playing, 2=paused, 3=buffering, 5=cued
             const s = e.data;
             if (s === 1) { setPlaying(true); startTick(); }
-            else if (s === 2 || s === 0) { setPlaying(false); stopTick(); }
-            else if (s === 3) { /* buffering */ }
+            else if (s === 2) { setPlaying(false); stopTick(); }
+            else if (s === 0) {
+              setPlaying(false); stopTick();
+              // Auto-advance to next video when this one ends
+              if (onNext) onNext();
+            }
             if (s === 1 || s === 3) {
               const dur = e.target.getDuration?.() || 0;
               if (dur > 0) setDuration(dur);
@@ -182,6 +190,8 @@ export function MusicVideoPlayer({ videoId, title }: Props) {
       if (e.code === "KeyM") toggleMute();
       if (e.code === "ArrowLeft") p.seekTo(Math.max(0, (p.getCurrentTime?.() || 0) - 10), true);
       if (e.code === "ArrowRight") p.seekTo(Math.min(duration, (p.getCurrentTime?.() || 0) + 10), true);
+      if (e.code === "KeyN" && onNext) onNext();
+      if (e.code === "KeyP" && onPrev) onPrev();
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
@@ -398,7 +408,24 @@ export function MusicVideoPlayer({ videoId, title }: Props) {
         </div>
 
         {/* Controls row */}
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          {/* Prev */}
+          <button
+            onClick={(e) => { e.stopPropagation(); onPrev?.(); }}
+            disabled={!hasPrev}
+            title="Previous (P)"
+            style={{
+              background: "none", border: "none",
+              color: hasPrev ? "rgba(255,255,255,0.8)" : "rgba(255,255,255,0.2)",
+              cursor: hasPrev ? "pointer" : "not-allowed",
+              padding: "4px 5px", display: "flex", alignItems: "center", borderRadius: 6,
+              transition: "color 0.15s",
+            }}
+          >
+            <SkipBack size={20} fill={hasPrev ? "currentColor" : "none"} />
+          </button>
+
+          {/* Play/Pause */}
           <button
             onClick={togglePlay}
             style={{
@@ -408,6 +435,22 @@ export function MusicVideoPlayer({ videoId, title }: Props) {
             }}
           >
             {playing ? <Pause size={22} fill="#fff" /> : <Play size={22} fill="#fff" style={{ marginLeft: 2 }} />}
+          </button>
+
+          {/* Next */}
+          <button
+            onClick={(e) => { e.stopPropagation(); onNext?.(); }}
+            disabled={!hasNext}
+            title="Next (N)"
+            style={{
+              background: "none", border: "none",
+              color: hasNext ? "rgba(255,255,255,0.8)" : "rgba(255,255,255,0.2)",
+              cursor: hasNext ? "pointer" : "not-allowed",
+              padding: "4px 5px", display: "flex", alignItems: "center", borderRadius: 6,
+              transition: "color 0.15s",
+            }}
+          >
+            <SkipForward size={20} fill={hasNext ? "currentColor" : "none"} />
           </button>
 
           <span style={{
