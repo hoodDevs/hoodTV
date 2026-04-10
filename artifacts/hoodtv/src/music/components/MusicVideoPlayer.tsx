@@ -38,20 +38,36 @@ function fmt(s: number) {
   return `${m}:${sec.toString().padStart(2, "0")}`;
 }
 
-let ytApiLoaded = false;
 let ytApiCallbacks: Array<() => void> = [];
+let ytApiScriptAdded = false;
 
 function loadYtApi(): Promise<void> {
   return new Promise((resolve) => {
-    if (ytApiLoaded && window.YT?.Player) { resolve(); return; }
+    // Already ready — resolve immediately
+    if (window.YT?.Player) { resolve(); return; }
+
     ytApiCallbacks.push(resolve);
-    if (document.getElementById("yt-iframe-api")) return;
+
+    // Script is already in the DOM (e.g. after HMR) — poll until YT is ready
+    if (ytApiScriptAdded || document.getElementById("yt-iframe-api")) {
+      ytApiScriptAdded = true;
+      const poll = setInterval(() => {
+        if (window.YT?.Player) {
+          clearInterval(poll);
+          const cbs = ytApiCallbacks.splice(0);
+          cbs.forEach((cb) => cb());
+        }
+      }, 100);
+      return;
+    }
+
+    // First load — inject script and hook the global callback
+    ytApiScriptAdded = true;
     const prevReady = window.onYouTubeIframeAPIReady;
     window.onYouTubeIframeAPIReady = () => {
-      ytApiLoaded = true;
       if (prevReady) prevReady();
-      ytApiCallbacks.forEach((cb) => cb());
-      ytApiCallbacks = [];
+      const cbs = ytApiCallbacks.splice(0);
+      cbs.forEach((cb) => cb());
     };
     const tag = document.createElement("script");
     tag.id = "yt-iframe-api";
