@@ -345,17 +345,11 @@ export async function getStreamSources(
     ? `/api/stream/movie/${tmdbId}/moviebox${mbQs.size ? `?${mbQs}` : ""}`
     : `/api/stream/tv/${tmdbId}/${s}/${e}/moviebox${mbQs.size ? `?${mbQs}` : ""}`;
 
-  // ── VidSrc (embed iframe — last resort, near-universal coverage) ─────────────
-  const vidsrcPath = type === "movie"
-    ? `/api/stream/movie/${tmdbId}/vidsrc`
-    : `/api/stream/tv/${tmdbId}/${s}/${e}/vidsrc`;
-
-  // Fire all four in parallel
-  const [videasyRes, nontongoRes, movieboxRes, vidsrcRes] = await Promise.allSettled([
+  // Fire three sources in parallel
+  const [videasyRes, nontongoRes, movieboxRes] = await Promise.allSettled([
     fetch(videasyPath),
     fetch(nontongoPath),
     fetch(movieboxPath),
-    fetch(vidsrcPath),
   ]);
 
   async function extractSources(res: PromiseSettledResult<Response>): Promise<StreamSource[]> {
@@ -368,15 +362,14 @@ export async function getStreamSources(
     }
   }
 
-  const [videasy, nontongo, moviebox, vidsrc] = await Promise.all([
+  const [videasy, nontongo, moviebox] = await Promise.all([
     extractSources(videasyRes),
     extractSources(nontongoRes),
     extractSources(movieboxRes),
-    extractSources(vidsrcRes),
   ]);
 
-  // Source priority: Videasy HLS → NontonGo HLS → MovieBox MP4 → VidSrc embed
-  const allSources: StreamSource[] = [...videasy, ...nontongo, ...moviebox, ...vidsrc];
+  // Source priority: Videasy HLS → NontonGo HLS → MovieBox MP4
+  const allSources: StreamSource[] = [...videasy, ...nontongo, ...moviebox];
 
   if (allSources.length === 0) {
     throw new Error("Stream unavailable — no sources returned");
