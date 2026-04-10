@@ -38,12 +38,6 @@ const BASE_CHIPS: ChipDef[] = [
   { label: "Mood & Sound", q: "lofi chill vibes 2024" },
 ];
 
-function avatarColor(name: string) {
-  let h = 0;
-  for (let i = 0; i < name.length; i++) h = (Math.imul(31, h) + name.charCodeAt(i)) | 0;
-  return `hsl(${Math.abs(h) % 360},55%,45%)`;
-}
-
 /** Interleave multiple arrays round-robin, deduplicating by video ID. */
 function interleaveAndDedup(buckets: YtVideo[][]): YtVideo[] {
   const seen = new Set<string>();
@@ -63,23 +57,23 @@ function interleaveAndDedup(buckets: YtVideo[][]): YtVideo[] {
 
 function VideoCard({ video, onClick }: { video: YtVideo; onClick: () => void }) {
   const [hovered, setHovered] = useState(false);
-  const color = avatarColor(video.author || "YT");
-  const initials = (video.author || "YT").slice(0, 2).toUpperCase();
 
   return (
     <div
       onClick={onClick}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
-      style={{ cursor: "pointer", display: "flex", flexDirection: "column" }}
+      style={{ cursor: "pointer" }}
     >
+      {/* Thumbnail */}
       <div
         style={{
           position: "relative", paddingTop: "56.25%",
-          borderRadius: 12, overflow: "hidden",
-          background: "#1a1a1a", marginBottom: 12,
-          transform: hovered ? "scale(1.02)" : "scale(1)",
+          borderRadius: 8, overflow: "hidden",
+          background: "#111",
+          transform: hovered ? "scale(1.03)" : "scale(1)",
           transition: "transform 0.25s ease",
+          marginBottom: 10,
         }}
       >
         <img
@@ -89,66 +83,49 @@ function VideoCard({ video, onClick }: { video: YtVideo; onClick: () => void }) 
           loading="lazy"
         />
         {video.duration && (
-          <span
-            style={{
-              position: "absolute", bottom: 6, right: 6,
-              background: "rgba(0,0,0,0.85)", color: "#fff",
-              fontSize: 11, fontWeight: 700, padding: "2px 7px",
-              borderRadius: 4, fontFamily: "monospace", letterSpacing: "0.04em",
-            }}
-          >
+          <span style={{
+            position: "absolute", bottom: 6, right: 6,
+            background: "rgba(0,0,0,0.85)", color: "#fff",
+            fontSize: 11, fontWeight: 700, padding: "2px 6px",
+            borderRadius: 4, fontFamily: "monospace",
+          }}>
             {video.duration}
           </span>
         )}
+        {/* Hover overlay gradient */}
+        <div style={{
+          position: "absolute", inset: 0,
+          background: "linear-gradient(to top, rgba(5,5,12,0.7) 0%, transparent 50%)",
+          opacity: hovered ? 1 : 0,
+          transition: "opacity 0.2s ease",
+        }} />
       </div>
 
-      <div style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
-        <div
-          style={{
-            width: 36, height: 36, borderRadius: "50%", flexShrink: 0,
-            background: color, display: "flex", alignItems: "center",
-            justifyContent: "center", fontSize: 12, fontWeight: 700,
-            color: "#fff", marginTop: 2,
-          }}
-        >
-          {initials}
-        </div>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div
-            style={{
-              fontSize: 14, fontWeight: 600, lineHeight: 1.4,
-              color: hovered ? "#c0bdf5" : "#fff",
-              display: "-webkit-box", WebkitLineClamp: 2,
-              WebkitBoxOrient: "vertical", overflow: "hidden",
-              marginBottom: 4, transition: "color 0.2s",
-            }}
-          >
-            {video.title}
-          </div>
-          <div style={{ fontSize: 12, color: "#aaa", marginBottom: 2 }}>{video.author}</div>
-          <div style={{ fontSize: 12, color: "#666" }}>
-            {[video.views, video.publishedAt].filter(Boolean).join(" • ")}
-          </div>
-        </div>
+      {/* Text — no avatar */}
+      <div
+        style={{
+          fontSize: 13, fontWeight: 600, lineHeight: 1.4,
+          color: hovered ? "#c0bdf5" : "#e0e0e0",
+          display: "-webkit-box", WebkitLineClamp: 2,
+          WebkitBoxOrient: "vertical", overflow: "hidden",
+          marginBottom: 4, transition: "color 0.2s",
+        }}
+      >
+        {video.title}
       </div>
+      <div style={{ fontSize: 12, color: "#666" }}>{video.author}</div>
     </div>
   );
 }
 
 function SkeletonGrid() {
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: "32px 20px" }}>
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: "28px 20px" }}>
       {Array.from({ length: 12 }).map((_, i) => (
         <div key={i}>
-          <div style={{ position: "relative", paddingTop: "56.25%", borderRadius: 12, background: "rgba(255,255,255,0.06)", marginBottom: 12 }} />
-          <div style={{ display: "flex", gap: 12 }}>
-            <div style={{ width: 36, height: 36, borderRadius: "50%", background: "rgba(255,255,255,0.06)", flexShrink: 0 }} />
-            <div style={{ flex: 1 }}>
-              <div style={{ height: 13, borderRadius: 4, background: "rgba(255,255,255,0.06)", marginBottom: 8 }} />
-              <div style={{ height: 12, borderRadius: 4, background: "rgba(255,255,255,0.04)", width: "55%", marginBottom: 6 }} />
-              <div style={{ height: 11, borderRadius: 4, background: "rgba(255,255,255,0.03)", width: "40%" }} />
-            </div>
-          </div>
+          <div style={{ position: "relative", paddingTop: "56.25%", borderRadius: 8, background: "rgba(255,255,255,0.05)", marginBottom: 10, animation: "pulse 2s infinite" }} />
+          <div style={{ height: 13, borderRadius: 4, background: "rgba(255,255,255,0.05)", marginBottom: 6, animation: "pulse 2s infinite" }} />
+          <div style={{ height: 12, borderRadius: 4, background: "rgba(255,255,255,0.03)", width: "45%", animation: "pulse 2s infinite" }} />
         </div>
       ))}
     </div>
@@ -440,7 +417,7 @@ export function MusicHomePage() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ duration: 0.25 }}
-            style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: "32px 20px" }}
+            style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: "28px 20px" }}
           >
             {videos.map((v) => (
               <VideoCard key={v.id} video={v} onClick={() => handleVideoClick(v)} />
