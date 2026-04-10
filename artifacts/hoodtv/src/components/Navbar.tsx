@@ -55,12 +55,19 @@ export function Navbar() {
           zIndex: 50,
           display: "flex",
           flexDirection: "column",
-          background: "rgba(8,8,14,0.97)",
+          background: "rgba(6,6,11,0.98)",
           backdropFilter: "blur(20px)",
           WebkitBackdropFilter: "blur(20px)",
-          borderRight: "0.5px solid rgba(255,255,255,0.07)",
+          borderRight: "0.5px solid rgba(255,255,255,0.06)",
         }}
       >
+        {/* Subtle purple ambient on left edge */}
+        <div style={{
+          position: "absolute", top: 0, left: 0, bottom: 0, width: 3,
+          background: "linear-gradient(to bottom, transparent 0%, rgba(127,119,221,0.5) 30%, rgba(127,119,221,0.3) 70%, transparent 100%)",
+          pointerEvents: "none",
+        }} />
+
         {/* Logo */}
         <Link href="/" data-testid="nav-logo">
           <div
@@ -79,7 +86,7 @@ export function Navbar() {
         </Link>
 
         {/* Nav links */}
-        <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "2px", padding: "0 12px" }}>
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "1px", padding: "0 10px" }}>
           {navLinks.map(({ label, href, icon: Icon }) => {
             const basePath = href.split("?")[0];
             const isActive = basePath === "/" ? location === "/" : location.startsWith(basePath);
@@ -90,40 +97,30 @@ export function Navbar() {
                 data-testid={`nav-link-${label.toLowerCase().replace(/\s/g, "-")}`}
               >
                 <div
+                  className="nav-item"
                   style={{
                     display: "flex",
                     alignItems: "center",
-                    gap: "12px",
-                    padding: "10px 14px",
+                    gap: "11px",
+                    padding: "9px 12px 9px 14px",
                     borderRadius: "10px",
                     cursor: "pointer",
-                    background: isActive ? "rgba(127,119,221,0.15)" : "transparent",
-                    color: isActive ? "#c0bdf5" : "#666",
+                    background: isActive ? "rgba(127,119,221,0.12)" : "transparent",
+                    color: isActive ? "#c0bdf5" : "#5a5a6e",
                     transition: "background 0.18s, color 0.18s",
                     fontSize: "13.5px",
-                    fontWeight: isActive ? 500 : 400,
+                    fontWeight: isActive ? 600 : 400,
                     letterSpacing: "0.02em",
+                    position: "relative",
+                    boxShadow: isActive ? "inset 3px 0 0 #7F77DD" : "inset 3px 0 0 transparent",
                   }}
-                  className="sidebar-link"
                 >
                   <Icon
-                    size={17}
+                    size={16}
                     strokeWidth={isActive ? 2.2 : 1.8}
-                    style={{ flexShrink: 0, color: isActive ? "#9D97E8" : "#555" }}
+                    style={{ flexShrink: 0, color: isActive ? "#9D97E8" : "#4a4a5e" }}
                   />
                   {label}
-                  {isActive && (
-                    <div
-                      style={{
-                        marginLeft: "auto",
-                        width: "4px",
-                        height: "4px",
-                        borderRadius: "50%",
-                        background: "#7F77DD",
-                        flexShrink: 0,
-                      }}
-                    />
-                  )}
                 </div>
               </Link>
             );
@@ -131,40 +128,40 @@ export function Navbar() {
         </div>
 
         {/* Divider */}
-        <div style={{ margin: "0 16px", height: "1px", background: "rgba(255,255,255,0.05)" }} />
+        <div style={{ margin: "0 16px", height: "1px", background: "rgba(255,255,255,0.04)" }} />
 
         {/* Bottom actions */}
-        <div style={{ padding: "14px 12px 24px", display: "flex", flexDirection: "column", gap: "4px" }}>
+        <div style={{ padding: "14px 10px 24px", display: "flex", flexDirection: "column", gap: "1px" }}>
           <button
             onClick={() => setSearchOpen(true)}
             data-testid="nav-search"
             style={{
               display: "flex",
               alignItems: "center",
-              gap: "12px",
-              padding: "10px 14px",
+              gap: "11px",
+              padding: "9px 12px 9px 14px",
               borderRadius: "10px",
               background: "none",
               border: "none",
               cursor: "pointer",
-              color: "#666",
+              color: "#5a5a6e",
               fontSize: "13.5px",
               fontWeight: 400,
               letterSpacing: "0.02em",
               width: "100%",
               transition: "background 0.18s, color 0.18s",
             }}
-            className="sidebar-link"
+            className="nav-item"
           >
-            <Search size={17} strokeWidth={1.8} style={{ flexShrink: 0, color: "#555" }} />
+            <Search size={16} strokeWidth={1.8} style={{ flexShrink: 0, color: "#4a4a5e" }} />
             Search
             <span
               style={{
                 marginLeft: "auto",
                 fontSize: "10px",
-                color: "#3d3d4f",
+                color: "#333",
                 background: "rgba(255,255,255,0.04)",
-                border: "1px solid rgba(255,255,255,0.07)",
+                border: "1px solid rgba(255,255,255,0.06)",
                 borderRadius: "4px",
                 padding: "1px 5px",
                 letterSpacing: "0.04em",
@@ -179,46 +176,48 @@ export function Navbar() {
           {/* Profile */}
           <Link href="/profile">
             <div
+              className="nav-item"
               style={{
                 display: "flex",
                 alignItems: "center",
                 gap: "11px",
-                padding: "10px 14px",
+                padding: "9px 12px 9px 14px",
                 borderRadius: "10px",
                 cursor: "pointer",
                 transition: "background 0.18s",
-                background: location.startsWith("/profile") ? "rgba(127,119,221,0.15)" : "transparent",
+                background: location.startsWith("/profile") ? "rgba(127,119,221,0.12)" : "transparent",
+                boxShadow: location.startsWith("/profile") ? "inset 3px 0 0 #7F77DD" : "inset 3px 0 0 transparent",
               }}
-              className="sidebar-link"
             >
               <div
                 style={{
-                  width: "28px",
-                  height: "28px",
+                  width: "26px",
+                  height: "26px",
                   borderRadius: "8px",
-                  background: "linear-gradient(135deg, rgba(127,119,221,0.3) 0%, rgba(157,151,232,0.15) 100%)",
-                  border: `1.5px solid ${location.startsWith("/profile") ? "rgba(127,119,221,0.7)" : "rgba(127,119,221,0.5)"}`,
+                  background: "linear-gradient(135deg, rgba(127,119,221,0.35) 0%, rgba(157,151,232,0.2) 100%)",
+                  border: `1.5px solid ${location.startsWith("/profile") ? "rgba(127,119,221,0.8)" : "rgba(127,119,221,0.4)"}`,
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
-                  fontSize: "11px",
+                  fontSize: "10px",
                   fontWeight: 700,
                   color: "#9D97E8",
                   flexShrink: 0,
                   fontFamily: "'DM Sans', sans-serif",
-                  letterSpacing: "0.03em",
                 }}
               >
                 HT
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <p style={{ fontSize: "13px", color: location.startsWith("/profile") ? "#c0bdf5" : "#888", fontWeight: location.startsWith("/profile") ? 500 : 400, lineHeight: 1.2 }}>
+                <p style={{
+                  fontSize: "13px",
+                  color: location.startsWith("/profile") ? "#c0bdf5" : "#5a5a6e",
+                  fontWeight: location.startsWith("/profile") ? 600 : 400,
+                  lineHeight: 1.2,
+                }}>
                   Profile
                 </p>
               </div>
-              {location.startsWith("/profile") && (
-                <div style={{ width: "4px", height: "4px", borderRadius: "50%", background: "#7F77DD", flexShrink: 0 }} />
-              )}
             </div>
           </Link>
         </div>
@@ -230,7 +229,7 @@ export function Navbar() {
           position: "fixed",
           inset: 0,
           zIndex: 200,
-          background: "rgba(5,5,12,0.96)",
+          background: "rgba(5,5,12,0.97)",
           display: "flex",
           alignItems: "flex-start",
           justifyContent: "center",
@@ -288,12 +287,12 @@ export function Navbar() {
       </div>
 
       <style>{`
-        .sidebar-link:hover {
-          background: rgba(255,255,255,0.05) !important;
-          color: #d0cef5 !important;
+        .nav-item:hover {
+          background: rgba(255,255,255,0.04) !important;
+          color: #c0c0d8 !important;
         }
-        .sidebar-link:hover svg {
-          color: #9D97E8 !important;
+        .nav-item:hover svg {
+          color: #7F77DD !important;
         }
       `}</style>
     </>

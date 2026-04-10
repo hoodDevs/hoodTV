@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
-import { Search, Sparkles, History, Heart } from "lucide-react";
+import { Search, Sparkles, History, Heart, Play } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import type { YtVideo } from "./MusicVideosPage";
 import { useMusicVideoHistory } from "@/hooks/useMusicVideoHistory";
@@ -69,11 +69,12 @@ function VideoCard({ video, onClick }: { video: YtVideo; onClick: () => void }) 
       <div
         style={{
           position: "relative", paddingTop: "56.25%",
-          borderRadius: 8, overflow: "hidden",
+          borderRadius: 10, overflow: "hidden",
           background: "#111",
-          transform: hovered ? "scale(1.03)" : "scale(1)",
-          transition: "transform 0.25s ease",
+          transform: hovered ? "scale(1.02)" : "scale(1)",
+          transition: "transform 0.3s cubic-bezier(.22,1,.36,1), box-shadow 0.3s",
           marginBottom: 10,
+          boxShadow: hovered ? "0 16px 40px rgba(0,0,0,0.6), 0 0 0 1px rgba(127,119,221,0.2)" : "0 4px 12px rgba(0,0,0,0.3)",
         }}
       >
         <img
@@ -82,30 +83,53 @@ function VideoCard({ video, onClick }: { video: YtVideo; onClick: () => void }) 
           style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }}
           loading="lazy"
         />
+
+        {/* Hover overlay gradient */}
+        <div style={{
+          position: "absolute", inset: 0,
+          background: "linear-gradient(to top, rgba(5,5,12,0.85) 0%, rgba(5,5,12,0.3) 40%, transparent 70%)",
+          opacity: hovered ? 1 : 0,
+          transition: "opacity 0.25s ease",
+        }} />
+
+        {/* Centered play button — appears on hover */}
+        <div style={{
+          position: "absolute", inset: 0,
+          display: "flex", alignItems: "center", justifyContent: "center",
+          opacity: hovered ? 1 : 0,
+          transition: "opacity 0.2s ease",
+        }}>
+          <div style={{
+            width: 48, height: 48, borderRadius: "50%",
+            background: "rgba(127,119,221,0.92)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            transform: hovered ? "scale(1)" : "scale(0.5)",
+            transition: "transform 0.3s cubic-bezier(.22,1,.36,1)",
+            boxShadow: "0 4px 24px rgba(127,119,221,0.6)",
+            flexShrink: 0,
+          }}>
+            <Play size={18} fill="white" color="white" style={{ marginLeft: 3 }} />
+          </div>
+        </div>
+
         {video.duration && (
           <span style={{
-            position: "absolute", bottom: 6, right: 6,
-            background: "rgba(0,0,0,0.85)", color: "#fff",
+            position: "absolute", bottom: 7, right: 7,
+            background: "rgba(0,0,0,0.88)", color: "#fff",
             fontSize: 11, fontWeight: 700, padding: "2px 6px",
             borderRadius: 4, fontFamily: "monospace",
+            opacity: hovered ? 0 : 1, transition: "opacity 0.15s",
           }}>
             {video.duration}
           </span>
         )}
-        {/* Hover overlay gradient */}
-        <div style={{
-          position: "absolute", inset: 0,
-          background: "linear-gradient(to top, rgba(5,5,12,0.7) 0%, transparent 50%)",
-          opacity: hovered ? 1 : 0,
-          transition: "opacity 0.2s ease",
-        }} />
       </div>
 
-      {/* Text — no avatar */}
+      {/* Text */}
       <div
         style={{
           fontSize: 13, fontWeight: 600, lineHeight: 1.4,
-          color: hovered ? "#c0bdf5" : "#e0e0e0",
+          color: hovered ? "#c0bdf5" : "#d8d8e8",
           display: "-webkit-box", WebkitLineClamp: 2,
           WebkitBoxOrient: "vertical", overflow: "hidden",
           marginBottom: 4, transition: "color 0.2s",
@@ -113,7 +137,7 @@ function VideoCard({ video, onClick }: { video: YtVideo; onClick: () => void }) 
       >
         {video.title}
       </div>
-      <div style={{ fontSize: 12, color: "#666" }}>{video.author}</div>
+      <div style={{ fontSize: 12, color: "#555" }}>{video.author}</div>
     </div>
   );
 }
@@ -240,46 +264,54 @@ export function MusicHomePage() {
   // ── Render ───────────────────────────────────────────────────────────────────
 
   return (
-    <div style={{ minHeight: "100vh", background: "#0f0f0f", fontFamily: "'DM Sans', sans-serif", color: "#fff" }}>
+    <div style={{ minHeight: "100vh", background: "#05050c", fontFamily: "'DM Sans', sans-serif", color: "#fff" }}>
 
       {/* Sticky top bar */}
       <div
         style={{
           position: "sticky", top: 0, zIndex: 100,
-          background: "rgba(15,15,15,0.96)", backdropFilter: "blur(14px)",
-          borderBottom: "1px solid rgba(255,255,255,0.05)",
-          padding: "10px 24px", display: "flex", alignItems: "center", gap: 24,
+          background: "rgba(5,5,12,0.97)", backdropFilter: "blur(20px)",
+          WebkitBackdropFilter: "blur(20px)",
+          borderBottom: "1px solid rgba(255,255,255,0.04)",
+          padding: "14px 32px", display: "flex", alignItems: "center", gap: 28,
         }}
       >
-        <span style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 28, letterSpacing: "0.04em", flexShrink: 0 }}>
-          ho<span style={{ color: "#7F77DD" }}>o</span>dMusic
+        <span style={{
+          fontFamily: "'Bebas Neue', sans-serif", fontSize: 30,
+          letterSpacing: "0.06em", flexShrink: 0, lineHeight: 1,
+          background: "linear-gradient(135deg, #fff 0%, #c0bdf5 100%)",
+          WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent",
+        }}>
+          ho<span style={{ WebkitTextFillColor: "#7F77DD" }}>o</span>dMUSIC
         </span>
         <div
           style={{
-            flex: 1, maxWidth: 600, margin: "0 auto",
+            flex: 1, maxWidth: 560, margin: "0 auto",
             display: "flex", alignItems: "center",
-            background: "rgba(255,255,255,0.05)",
-            border: "1px solid rgba(255,255,255,0.1)",
-            borderRadius: 24, padding: "8px 18px", gap: 10,
+            background: "rgba(255,255,255,0.04)",
+            border: "1px solid rgba(255,255,255,0.08)",
+            borderRadius: 28, padding: "9px 20px", gap: 10,
+            transition: "border-color 0.2s",
           }}
+          onFocus={() => {}}
         >
-          <Search size={15} color="#888" />
+          <Search size={14} color="#555" />
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search"
-            style={{ flex: 1, background: "none", border: "none", outline: "none", color: "#fff", fontSize: 14, fontFamily: "'DM Sans', sans-serif" }}
+            placeholder="Search artists, songs, videos…"
+            style={{ flex: 1, background: "none", border: "none", outline: "none", color: "#fff", fontSize: 13.5, fontFamily: "'DM Sans', sans-serif" }}
           />
         </div>
-        <div style={{ width: 120, flexShrink: 0 }} />
+        <div style={{ width: 100, flexShrink: 0 }} />
       </div>
 
       {/* Filter chips */}
       {!isSearching && (
         <div
           style={{
-            display: "flex", gap: 8, padding: "12px 24px",
+            display: "flex", gap: 8, padding: "14px 32px",
             overflowX: "auto", scrollbarWidth: "none",
             borderBottom: "1px solid rgba(255,255,255,0.04)",
           }}
@@ -347,10 +379,11 @@ export function MusicHomePage() {
 
       {/* Continue Watching / Recently Watched row */}
       {!isSearching && history.length > 0 && (
-        <div style={{ padding: "20px 24px 4px" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
-            <History size={14} color="#7F77DD" />
-            <span style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 18, letterSpacing: "0.06em", color: "#fff" }}>
+        <div style={{ padding: "28px 32px 4px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
+            <div style={{ width: 3, height: 18, borderRadius: 2, background: "linear-gradient(to bottom, #7F77DD, #c0bdf5)", flexShrink: 0 }} />
+            <History size={13} color="#9D97E8" />
+            <span style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 20, letterSpacing: "0.08em", color: "#e8e6ff" }}>
               {history.some((v) => v.progress && v.progress > 5 && v.progress < 95)
                 ? "Continue Watching"
                 : "Recently Watched"}
@@ -409,10 +442,11 @@ export function MusicHomePage() {
 
       {/* Favorites row */}
       {!isSearching && favorites.length > 0 && (
-        <div style={{ padding: "16px 24px 4px" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
-            <Heart size={14} color="#c0bdf5" fill="#c0bdf5" />
-            <span style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 18, letterSpacing: "0.06em", color: "#fff" }}>
+        <div style={{ padding: "24px 32px 4px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
+            <div style={{ width: 3, height: 18, borderRadius: 2, background: "linear-gradient(to bottom, #c0bdf5, #7F77DD)", flexShrink: 0 }} />
+            <Heart size={13} color="#c0bdf5" fill="#c0bdf5" />
+            <span style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 20, letterSpacing: "0.08em", color: "#e8e6ff" }}>
               My Favorites
             </span>
           </div>
@@ -437,7 +471,7 @@ export function MusicHomePage() {
       )}
 
       {/* Video grid */}
-      <div style={{ padding: "20px 24px 40px" }}>
+      <div style={{ padding: "24px 32px 60px" }}>
         {isLoading ? (
           <SkeletonGrid />
         ) : videos.length === 0 ? (

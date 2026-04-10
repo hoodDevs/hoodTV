@@ -151,7 +151,16 @@ export function HeroSection({ items }: HeroSectionProps) {
       <div
         className="absolute inset-0 pointer-events-none"
         style={{
-          background: "linear-gradient(to right, rgba(5,5,8,0.88) 0%, rgba(5,5,8,0.5) 35%, transparent 65%)",
+          background: "linear-gradient(to right, rgba(5,5,8,0.9) 0%, rgba(5,5,8,0.55) 38%, transparent 68%)",
+        }}
+      />
+
+      {/* Purple ambient glow — bottom-left behind content */}
+      <div
+        className="absolute pointer-events-none"
+        style={{
+          bottom: 0, left: 0, width: "40%", height: "50%",
+          background: "radial-gradient(ellipse at 0% 100%, rgba(127,119,221,0.12) 0%, transparent 70%)",
         }}
       />
 
