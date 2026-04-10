@@ -749,11 +749,18 @@ app.get("/api/yt/info/:videoId", async (req, res) => {
     const info = await getVideoInfo(videoId);
     const basic = info.basic_info ?? {};
 
-    // Collect related from watch_next_feed — accept any item that has an id
-    // and looks like a video (broad check to handle YouTube.js version differences)
+    // Audio-only video types from YouTube Music — skip these, we want real videos
+    const AUDIO_ONLY_TYPES = new Set([
+      "MUSIC_VIDEO_TYPE_ATV",        // Audio track (album art only)
+      "MUSIC_VIDEO_TYPE_PODCAST_EPISODE",
+    ]);
+
+    // Collect related from watch_next_feed — only CompactVideo items (real videos)
     const related = [];
     for (const item of info.watch_next_feed ?? []) {
       if (related.length >= 20) break;
+      // Only accept proper video items, not music shelf items
+      if (item.type && item.type !== "CompactVideo") continue;
       const id = item.id ?? item.video_id;
       if (!id) continue;
       const title =
@@ -783,6 +790,7 @@ app.get("/api/yt/info/:videoId", async (req, res) => {
     }
 
     // If watch_next_feed gave us nothing, fall back to YT Music related tracks
+    // but filter to music VIDEO types only (skip audio-only tracks)
     if (related.length === 0) {
       try {
         const yt = await getYT();
@@ -793,6 +801,8 @@ app.get("/api/yt/info/:videoId", async (req, res) => {
             if (related.length >= 20) break;
             const id = item.id ?? item.video_id ?? "";
             if (!id) continue;
+            // Skip audio-only track types
+            if (item.video_type && AUDIO_ONLY_TYPES.has(item.video_type)) continue;
             const title =
               (typeof item.title === "object" ? item.title?.text : item.title) ?? "";
             if (!title) continue;
