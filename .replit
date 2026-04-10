@@ -1,4 +1,4 @@
-modules = ["nodejs-24", "python-3.12", "go-1.22", "rust-stable", "java-graalvm22.3"]
+modules = ["nodejs-20", "python-3.12", "web", "go-1.21", "rust"]
 
 [deployment]
 router = "application"
@@ -69,7 +69,8 @@ outputType = "console"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "export PATH=$PATH:/nix/var/nix/profiles/default/bin && PORT=8000 PYTHON_URL=http://localhost:8080 RUST_URL=http://localhost:9000 GO_URL=http://localhost:8090 /nix/store/xnndv02a17ylc8yzmcqzjmj2k54bmrk5-scala-cli-1.8.0/bin/scala-cli run artifacts/scala-gateway/Gateway.scala"
+args = "export PATH=$PATH:/nix/var/nix/profiles/default/bin && PORT=8000 PYTHON_URL=http://localhost:8080 RUST_URL=http://localhost:9000 GO_URL=http://localhost:8090 /nix/store/xnndv02a17ylc8yzmcqzjmj2k54bmrk5-scala-cli-1.8.0/bin/scala-cli run --server=false artifacts/scala-gateway/Gateway.scala"
+waitForPort = 8000
 
 [[workflows.workflow]]
 name = "Rust CDN Health"
