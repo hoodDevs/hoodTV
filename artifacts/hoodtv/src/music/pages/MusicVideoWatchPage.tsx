@@ -1,7 +1,7 @@
 import { useRef, useEffect, useCallback, useState } from "react";
 import { useParams, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, Eye, Clock, ExternalLink, Heart, Maximize2, Minimize2, Repeat } from "lucide-react";
+import { ArrowLeft, Eye, Clock, Heart, Maximize2, Minimize2, Repeat } from "lucide-react";
 import { motion } from "framer-motion";
 import { MusicVideoPlayer } from "../components/MusicVideoPlayer";
 import { useMusicVideoHistory } from "@/hooks/useMusicVideoHistory";
@@ -219,22 +219,6 @@ export function MusicVideoWatchPage() {
             {theater ? <Minimize2 size={13} /> : <Maximize2 size={13} />} Theater
           </motion.button>
 
-          {info && (
-            <motion.a
-              whileHover={{ scale: 1.04, color: "#fff", backgroundColor: "rgba(255,255,255,0.1)" }}
-              whileTap={{ scale: 0.95 }}
-              href={`https://www.youtube.com/watch?v=${videoId}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              style={{
-                display: "flex", alignItems: "center", gap: 8,
-                fontSize: 13, fontWeight: 600, color: "#aaa", textDecoration: "none",
-                background: "rgba(255,255,255,0.05)", padding: "8px 16px", borderRadius: 20, border: "1px solid rgba(255,255,255,0.1)", transition: "all 0.2s"
-              }}
-            >
-              <ExternalLink size={16} /> YouTube
-            </motion.a>
-          )}
         </div>
       </div>
 

@@ -8,7 +8,7 @@
 import { useRef, useState, useEffect, useCallback, useId } from "react";
 import {
   Play, Pause, Volume2, VolumeX, Maximize, Minimize,
-  ExternalLink, SkipBack, SkipForward,
+  SkipBack, SkipForward,
 } from "lucide-react";
 
 const SPEEDS = [0.75, 1, 1.25, 1.5, 2] as const;
@@ -366,21 +366,6 @@ export function MusicVideoPlayer({ videoId, title, onPrev, onNext, hasPrev = fal
           }}>
             This video isn't available for playback
           </div>
-          <a
-            href={`https://www.youtube.com/watch?v=${videoId}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            style={{
-              display: "flex", alignItems: "center", gap: 7,
-              background: "rgba(255,255,255,0.06)",
-              border: "1px solid rgba(255,255,255,0.12)",
-              color: "#888", fontSize: 13, fontWeight: 600,
-              padding: "9px 22px", borderRadius: 22, cursor: "pointer",
-              textDecoration: "none", fontFamily: "DM Sans, sans-serif",
-            }}
-          >
-            <ExternalLink size={14} /> Open in YouTube
-          </a>
         </div>
       )}
 
