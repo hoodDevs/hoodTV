@@ -22,6 +22,7 @@ interface Props {
   hasPrev?: boolean;
   hasNext?: boolean;
   autoplayEnabled?: boolean;
+  onProgress?: (pct: number, duration: number) => void;
 }
 
 declare global {
@@ -76,7 +77,7 @@ function loadYtApi(): Promise<void> {
   });
 }
 
-export function MusicVideoPlayer({ videoId, title, onPrev, onNext, hasPrev = false, hasNext = false, autoplayEnabled = true }: Props) {
+export function MusicVideoPlayer({ videoId, title, onPrev, onNext, hasPrev = false, hasNext = false, autoplayEnabled = true, onProgress }: Props) {
   const uid = useId().replace(/:/g, "");
   const iframeContainerId = `ytplayer-${uid}`;
 
@@ -84,7 +85,10 @@ export function MusicVideoPlayer({ videoId, title, onPrev, onNext, hasPrev = fal
   const progressRef = useRef<HTMLDivElement>(null);
   const playerRef = useRef<any>(null);
   const rafRef = useRef<number | null>(null);
+  const progressIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const onProgressRef = useRef(onProgress);
+  useEffect(() => { onProgressRef.current = onProgress; }, [onProgress]);
 
   const [ready, setReady] = useState(false);
   const [playing, setPlaying] = useState(false);
@@ -114,10 +118,21 @@ export function MusicVideoPlayer({ videoId, title, onPrev, onNext, hasPrev = fal
     };
     if (rafRef.current) cancelAnimationFrame(rafRef.current);
     rafRef.current = requestAnimationFrame(tick);
+
+    // Report progress every 5 seconds while playing
+    if (progressIntervalRef.current) clearInterval(progressIntervalRef.current);
+    progressIntervalRef.current = setInterval(() => {
+      const p = playerRef.current;
+      if (!p?.getCurrentTime || !onProgressRef.current) return;
+      const ct = p.getCurrentTime() || 0;
+      const d = p.getDuration?.() || 0;
+      if (d > 0) onProgressRef.current(Math.min(100, (ct / d) * 100), d);
+    }, 5000);
   }, [duration]);
 
   const stopTick = useCallback(() => {
     if (rafRef.current) { cancelAnimationFrame(rafRef.current); rafRef.current = null; }
+    if (progressIntervalRef.current) { clearInterval(progressIntervalRef.current); progressIntervalRef.current = null; }
   }, []);
 
   // Initialise / re-initialise player when videoId changes

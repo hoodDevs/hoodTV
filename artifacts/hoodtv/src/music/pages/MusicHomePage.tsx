@@ -345,31 +345,64 @@ export function MusicHomePage() {
         )}
       </AnimatePresence>
 
-      {/* Recently Watched row */}
+      {/* Continue Watching / Recently Watched row */}
       {!isSearching && history.length > 0 && (
         <div style={{ padding: "20px 24px 4px" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
             <History size={14} color="#7F77DD" />
             <span style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 18, letterSpacing: "0.06em", color: "#fff" }}>
-              Recently Watched
+              {history.some((v) => v.progress && v.progress > 5 && v.progress < 95)
+                ? "Continue Watching"
+                : "Recently Watched"}
             </span>
           </div>
           <div style={{ display: "flex", gap: 14, overflowX: "auto", scrollbarWidth: "none", paddingBottom: 4 }}>
-            {history.slice(0, 12).map((v) => (
-              <div
-                key={v.id}
-                onClick={() => navigate(`/music/videos/${v.id}`)}
-                style={{ flexShrink: 0, width: 200, cursor: "pointer" }}
-              >
-                <div style={{ position: "relative", width: 200, height: 112, borderRadius: 8, overflow: "hidden", background: "#111", marginBottom: 8 }}>
-                  <img src={v.thumbnail} alt={v.title} style={{ width: "100%", height: "100%", objectFit: "cover", transition: "transform 0.3s" }}
-                    onMouseEnter={(e) => (e.currentTarget.style.transform = "scale(1.05)")}
-                    onMouseLeave={(e) => (e.currentTarget.style.transform = "scale(1)")} />
+            {history.slice(0, 12).map((v) => {
+              const showProgress = typeof v.progress === "number" && v.progress > 5 && v.progress < 95;
+              return (
+                <div
+                  key={v.id}
+                  onClick={() => navigate(`/music/videos/${v.id}`)}
+                  style={{ flexShrink: 0, width: 200, cursor: "pointer" }}
+                >
+                  <div style={{ position: "relative", width: 200, height: 112, borderRadius: 8, overflow: "hidden", background: "#111", marginBottom: 8 }}>
+                    <img
+                      src={v.thumbnail}
+                      alt={v.title}
+                      style={{ width: "100%", height: "100%", objectFit: "cover", transition: "transform 0.3s" }}
+                      onMouseEnter={(e) => (e.currentTarget.style.transform = "scale(1.05)")}
+                      onMouseLeave={(e) => (e.currentTarget.style.transform = "scale(1)")}
+                    />
+                    {/* Progress bar */}
+                    {showProgress && (
+                      <div style={{
+                        position: "absolute", bottom: 0, left: 0, right: 0,
+                        height: 3, background: "rgba(255,255,255,0.15)",
+                      }}>
+                        <div style={{
+                          height: "100%",
+                          width: `${v.progress}%`,
+                          background: "linear-gradient(90deg, #7F77DD, #c0bdf5)",
+                          borderRadius: "0 2px 2px 0",
+                        }} />
+                      </div>
+                    )}
+                    {/* "Watched" checkmark for finished videos */}
+                    {typeof v.progress === "number" && v.progress >= 95 && (
+                      <div style={{
+                        position: "absolute", top: 6, right: 6,
+                        width: 22, height: 22, borderRadius: "50%",
+                        background: "rgba(127,119,221,0.9)",
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                        fontSize: 12, color: "#fff",
+                      }}>✓</div>
+                    )}
+                  </div>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: "#ddd", lineHeight: 1.3, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{v.title}</div>
+                  <div style={{ fontSize: 11, color: "#666", marginTop: 3 }}>{v.author}</div>
                 </div>
-                <div style={{ fontSize: 12, fontWeight: 600, color: "#ddd", lineHeight: 1.3, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{v.title}</div>
-                <div style={{ fontSize: 11, color: "#666", marginTop: 3 }}>{v.author}</div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}

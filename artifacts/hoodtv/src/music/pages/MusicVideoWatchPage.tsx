@@ -112,8 +112,12 @@ export function MusicVideoWatchPage() {
     staleTime: 10 * 60 * 1000,
   });
 
-  const { record: recordHistory } = useMusicVideoHistory();
+  const { record: recordHistory, updateProgress } = useMusicVideoHistory();
   const { toggle: toggleFav, isFavorite } = useMusicVideoFavorites();
+
+  const handleProgress = useCallback((pct: number, dur: number) => {
+    if (videoId) updateProgress(videoId, pct, dur);
+  }, [videoId, updateProgress]);
 
   const [autoplay, setAutoplay] = useState<boolean>(() => {
     try { return localStorage.getItem("hoodtv_autoplay") !== "false"; } catch { return true; }
@@ -276,6 +280,7 @@ export function MusicVideoWatchPage() {
               hasPrev={historyRef.current.length > 0}
               hasNext={(info?.related?.length ?? 0) > 0}
               autoplayEnabled={autoplay}
+              onProgress={handleProgress}
             />
           </motion.div>
 
@@ -387,7 +392,7 @@ export function MusicVideoWatchPage() {
         {/* Related videos sidebar — hidden in theater mode */}
         {!theater && <div style={{ padding: "32px 32px 32px 0", minHeight: "100vh" }}>
           <h2 style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 24, color: "#fff", letterSpacing: "0.06em", marginBottom: 24, paddingLeft: 16 }}>
-            Continue Watching
+            Up Next
           </h2>
 
           {isLoading && (
