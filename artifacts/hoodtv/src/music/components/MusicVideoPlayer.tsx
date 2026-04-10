@@ -1,11 +1,10 @@
 /**
- * MusicVideoPlayer — hoodTV themed video player
+ * MusicVideoPlayer — hoodTV custom player
  *
- * Uses the YouTube IFrame Player API for reliable video streaming, with a
- * fully custom themed control overlay. YouTube controls are hidden; all
- * interaction goes through our own UI.
+ * Plays YouTube music videos via the /api/yt/video/stream proxy (muxed MP4,
+ * no YouTube branding, no iframes). Full custom controls overlay.
  */
-import { useRef, useState, useEffect, useCallback, useId } from "react";
+import { useRef, useState, useEffect, useCallback } from "react";
 import {
   Play, Pause, Volume2, VolumeX, Maximize, Minimize,
   SkipBack, SkipForward,
@@ -25,13 +24,6 @@ interface Props {
   onProgress?: (pct: number, duration: number) => void;
 }
 
-declare global {
-  interface Window {
-    YT: any;
-    onYouTubeIframeAPIReady: () => void;
-  }
-}
-
 function fmt(s: number) {
   if (!isFinite(s) || isNaN(s) || s < 0) return "0:00";
   const m = Math.floor(s / 60);
@@ -39,224 +31,162 @@ function fmt(s: number) {
   return `${m}:${sec.toString().padStart(2, "0")}`;
 }
 
-let ytApiCallbacks: Array<() => void> = [];
-let ytApiScriptAdded = false;
-
-function loadYtApi(): Promise<void> {
-  return new Promise((resolve) => {
-    // Already ready — resolve immediately
-    if (window.YT?.Player) { resolve(); return; }
-
-    ytApiCallbacks.push(resolve);
-
-    // Script is already in the DOM (e.g. after HMR) — poll until YT is ready
-    if (ytApiScriptAdded || document.getElementById("yt-iframe-api")) {
-      ytApiScriptAdded = true;
-      const poll = setInterval(() => {
-        if (window.YT?.Player) {
-          clearInterval(poll);
-          const cbs = ytApiCallbacks.splice(0);
-          cbs.forEach((cb) => cb());
-        }
-      }, 100);
-      return;
-    }
-
-    // First load — inject script and hook the global callback
-    ytApiScriptAdded = true;
-    const prevReady = window.onYouTubeIframeAPIReady;
-    window.onYouTubeIframeAPIReady = () => {
-      if (prevReady) prevReady();
-      const cbs = ytApiCallbacks.splice(0);
-      cbs.forEach((cb) => cb());
-    };
-    const tag = document.createElement("script");
-    tag.id = "yt-iframe-api";
-    tag.src = "https://www.youtube.com/iframe_api";
-    document.head.appendChild(tag);
-  });
-}
-
-export function MusicVideoPlayer({ videoId, title, onPrev, onNext, hasPrev = false, hasNext = false, autoplayEnabled = true, onProgress }: Props) {
-  const uid = useId().replace(/:/g, "");
-  const iframeContainerId = `ytplayer-${uid}`;
-
-  const containerRef = useRef<HTMLDivElement>(null);
-  const progressRef = useRef<HTMLDivElement>(null);
-  const playerRef = useRef<any>(null);
-  const rafRef = useRef<number | null>(null);
-  const progressIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const onProgressRef = useRef(onProgress);
+export function MusicVideoPlayer({
+  videoId, title, onPrev, onNext,
+  hasPrev = false, hasNext = false,
+  autoplayEnabled = true, onProgress,
+}: Props) {
+  const containerRef   = useRef<HTMLDivElement>(null);
+  const videoRef       = useRef<HTMLVideoElement>(null);
+  const progressRef    = useRef<HTMLDivElement>(null);
+  const hideTimerRef   = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const progressIntRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const onProgressRef  = useRef(onProgress);
   useEffect(() => { onProgressRef.current = onProgress; }, [onProgress]);
 
-  const [ready, setReady] = useState(false);
-  const [playing, setPlaying] = useState(false);
-  const [currentTime, setCurrentTime] = useState(0);
-  const [duration, setDuration] = useState(0);
-  const [volume, setVolume] = useState(80);
-  const [muted, setMuted] = useState(false);
-  const [fullscreen, setFullscreen] = useState(false);
+  const [playing,      setPlaying]      = useState(false);
+  const [currentTime,  setCurrentTime]  = useState(0);
+  const [duration,     setDuration]     = useState(0);
+  const [volume,       setVolume]       = useState(1);
+  const [muted,        setMuted]        = useState(false);
+  const [fullscreen,   setFullscreen]   = useState(false);
   const [showControls, setShowControls] = useState(true);
-  const [seeking, setSeeking] = useState(false);
-  const [playerError, setPlayerError] = useState(false);
+  const [seeking,      setSeeking]      = useState(false);
+  const [buffering,    setBuffering]    = useState(true);
+  const [playerError,  setPlayerError]  = useState(false);
+  const [needsClick,   setNeedsClick]   = useState(false);
   const [playbackRate, setPlaybackRate] = useState<Speed>(1);
 
-  // Tick: update current time via RAF
-  const startTick = useCallback(() => {
-    const tick = () => {
-      const p = playerRef.current;
-      if (p?.getCurrentTime) {
-        const ct = p.getCurrentTime() || 0;
-        setCurrentTime(ct);
-        if (!duration) {
-          const d = p.getDuration?.() || 0;
-          if (d > 0) setDuration(d);
-        }
-      }
-      rafRef.current = requestAnimationFrame(tick);
-    };
-    if (rafRef.current) cancelAnimationFrame(rafRef.current);
-    rafRef.current = requestAnimationFrame(tick);
+  const streamSrc = `/api/yt/video/stream?videoId=${videoId}`;
 
-    // Report progress every 5 seconds while playing
-    if (progressIntervalRef.current) clearInterval(progressIntervalRef.current);
-    progressIntervalRef.current = setInterval(() => {
-      const p = playerRef.current;
-      if (!p?.getCurrentTime || !onProgressRef.current) return;
-      const ct = p.getCurrentTime() || 0;
-      const d = p.getDuration?.() || 0;
-      if (d > 0) onProgressRef.current(Math.min(100, (ct / d) * 100), d);
-    }, 5000);
-  }, [duration]);
-
-  const stopTick = useCallback(() => {
-    if (rafRef.current) { cancelAnimationFrame(rafRef.current); rafRef.current = null; }
-    if (progressIntervalRef.current) { clearInterval(progressIntervalRef.current); progressIntervalRef.current = null; }
-  }, []);
-
-  // Initialise / re-initialise player when videoId changes
+  // ── Wire up video events ───────────────────────────────────────────────────
   useEffect(() => {
-    let destroyed = false;
-    setReady(false);
+    const v = videoRef.current;
+    if (!v) return;
+
+    // Reset state for new video
     setPlaying(false);
     setCurrentTime(0);
     setDuration(0);
+    setBuffering(true);
     setPlayerError(false);
-    stopTick();
+    setNeedsClick(false);
+    if (progressIntRef.current) clearInterval(progressIntRef.current);
 
-    loadYtApi().then(() => {
-      if (destroyed) return;
-      if (playerRef.current) {
-        try { playerRef.current.destroy(); } catch {}
-        playerRef.current = null;
+    v.load();
+
+    const onLoadedMeta = () => {
+      setDuration(v.duration || 0);
+      setBuffering(false);
+    };
+    const onTimeUpdate = () => {
+      setCurrentTime(v.currentTime);
+    };
+    const onPlaying = () => { setPlaying(true); setBuffering(false); setNeedsClick(false); };
+    const onPause   = () => setPlaying(false);
+    const onWaiting = () => setBuffering(true);
+    const onCanPlay = () => setBuffering(false);
+    const onEnded   = () => {
+      setPlaying(false);
+      if (autoplayEnabled && onNext) onNext();
+    };
+    const onError   = () => {
+      setPlayerError(true);
+      setBuffering(false);
+    };
+    const onDurationChange = () => {
+      if (v.duration && isFinite(v.duration)) setDuration(v.duration);
+    };
+
+    v.addEventListener("loadedmetadata", onLoadedMeta);
+    v.addEventListener("timeupdate",     onTimeUpdate);
+    v.addEventListener("playing",        onPlaying);
+    v.addEventListener("pause",          onPause);
+    v.addEventListener("waiting",        onWaiting);
+    v.addEventListener("canplay",        onCanPlay);
+    v.addEventListener("ended",          onEnded);
+    v.addEventListener("error",          onError);
+    v.addEventListener("durationchange", onDurationChange);
+
+    // Start autoplay
+    v.play().catch(() => setNeedsClick(true));
+
+    // Report progress every 5s
+    progressIntRef.current = setInterval(() => {
+      if (!v.paused && v.duration > 0 && onProgressRef.current) {
+        onProgressRef.current(Math.min(100, (v.currentTime / v.duration) * 100), v.duration);
       }
-
-      playerRef.current = new window.YT.Player(iframeContainerId, {
-        videoId,
-        height: "100%",
-        width: "100%",
-        playerVars: {
-          controls: 0,
-          disablekb: 1,
-          modestbranding: 1,
-          rel: 0,
-          showinfo: 0,
-          iv_load_policy: 3,
-          cc_load_policy: 0,
-          playsinline: 1,
-          autoplay: 1,
-          origin: window.location.origin,
-        },
-        events: {
-          onReady: (e: any) => {
-            if (destroyed) return;
-            const d = e.target.getDuration?.() || 0;
-            setDuration(d > 0 ? d : 0);
-            setVolume(e.target.getVolume?.() ?? 80);
-            setMuted(e.target.isMuted?.() ?? false);
-            setReady(true);
-          },
-          onStateChange: (e: any) => {
-            if (destroyed) return;
-            // -1=unstarted, 0=ended, 1=playing, 2=paused, 3=buffering, 5=cued
-            const s = e.data;
-            if (s === 1) { setPlaying(true); startTick(); }
-            else if (s === 2) { setPlaying(false); stopTick(); }
-            else if (s === 0) {
-              setPlaying(false); stopTick();
-              if (autoplayEnabled && onNext) onNext();
-            }
-            if (s === 1 || s === 3) {
-              const dur = e.target.getDuration?.() || 0;
-              if (dur > 0) setDuration(dur);
-            }
-          },
-          onError: () => {
-            if (destroyed) return;
-            setPlayerError(true);
-          },
-        },
-      });
-    });
+    }, 5000);
 
     return () => {
-      destroyed = true;
-      stopTick();
+      v.removeEventListener("loadedmetadata", onLoadedMeta);
+      v.removeEventListener("timeupdate",     onTimeUpdate);
+      v.removeEventListener("playing",        onPlaying);
+      v.removeEventListener("pause",          onPause);
+      v.removeEventListener("waiting",        onWaiting);
+      v.removeEventListener("canplay",        onCanPlay);
+      v.removeEventListener("ended",          onEnded);
+      v.removeEventListener("error",          onError);
+      v.removeEventListener("durationchange", onDurationChange);
+      if (progressIntRef.current) clearInterval(progressIntRef.current);
     };
   }, [videoId]);
 
-  // Fullscreen change listener
+  // ── Fullscreen listener ────────────────────────────────────────────────────
   useEffect(() => {
     const onFS = () => setFullscreen(!!document.fullscreenElement);
     document.addEventListener("fullscreenchange", onFS);
     return () => document.removeEventListener("fullscreenchange", onFS);
   }, []);
 
-  // Keyboard shortcuts
+  // ── Keyboard shortcuts ─────────────────────────────────────────────────────
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement)?.tagName;
       if (tag === "INPUT" || tag === "TEXTAREA") return;
-      const p = playerRef.current;
-      if (!p) return;
-      if (e.code === "Space") { e.preventDefault(); playing ? p.pauseVideo() : p.playVideo(); }
+      const v = videoRef.current;
+      if (!v) return;
+      if (e.code === "Space") { e.preventDefault(); v.paused ? v.play() : v.pause(); }
       if (e.code === "KeyF") toggleFullscreen();
-      if (e.code === "KeyM") toggleMute();
-      if (e.code === "ArrowLeft") p.seekTo(Math.max(0, (p.getCurrentTime?.() || 0) - 10), true);
-      if (e.code === "ArrowRight") p.seekTo(Math.min(duration, (p.getCurrentTime?.() || 0) + 10), true);
+      if (e.code === "KeyM") { v.muted = !v.muted; setMuted(v.muted); }
+      if (e.code === "ArrowLeft")  { v.currentTime = Math.max(0, v.currentTime - 10); }
+      if (e.code === "ArrowRight") { v.currentTime = Math.min(v.duration, v.currentTime + 10); }
       if (e.code === "KeyN" && onNext) onNext();
       if (e.code === "KeyP" && onPrev) onPrev();
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [playing, duration]);
+  }, []);
 
+  // ── Controls auto-hide ─────────────────────────────────────────────────────
   const resetHideTimer = useCallback(() => {
     setShowControls(true);
     if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
     hideTimerRef.current = setTimeout(() => setShowControls(false), 3200);
   }, []);
 
+  // ── Actions ────────────────────────────────────────────────────────────────
   const togglePlay = useCallback(() => {
-    const p = playerRef.current;
-    if (!p) return;
-    if (playing) p.pauseVideo();
-    else p.playVideo();
-  }, [playing]);
+    const v = videoRef.current;
+    if (!v) return;
+    if (v.paused) v.play().catch(() => {});
+    else v.pause();
+  }, []);
 
   const toggleMute = useCallback(() => {
-    const p = playerRef.current;
-    if (!p) return;
-    if (muted) { p.unMute(); setMuted(false); }
-    else { p.mute(); setMuted(true); }
-  }, [muted]);
+    const v = videoRef.current;
+    if (!v) return;
+    v.muted = !v.muted;
+    setMuted(v.muted);
+  }, []);
 
   const cycleSpeed = useCallback(() => {
-    const idx = SPEEDS.indexOf(playbackRate);
+    const v = videoRef.current;
+    if (!v) return;
+    const idx  = SPEEDS.indexOf(playbackRate);
     const next = SPEEDS[(idx + 1) % SPEEDS.length];
+    v.playbackRate = next;
     setPlaybackRate(next);
-    playerRef.current?.setPlaybackRate?.(next);
   }, [playbackRate]);
 
   const toggleFullscreen = useCallback(async () => {
@@ -270,13 +200,25 @@ export function MusicVideoPlayer({ videoId, title, onPrev, onNext, hasPrev = fal
 
   const seekTo = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
     const bar = progressRef.current;
-    const p = playerRef.current;
-    if (!bar || !p || !duration) return;
+    const v   = videoRef.current;
+    if (!bar || !v || !v.duration) return;
     const rect = bar.getBoundingClientRect();
-    const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-    p.seekTo(pct * duration, true);
+    const pct  = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+    v.currentTime = pct * v.duration;
     setSeeking(false);
-  }, [duration]);
+  }, []);
+
+  const startPlay = useCallback(async () => {
+    const v = videoRef.current;
+    if (!v) return;
+    v.muted = false;
+    try { await v.play(); setMuted(false); setNeedsClick(false); }
+    catch {
+      v.muted = true;
+      try { await v.play(); setMuted(true); setNeedsClick(false); }
+      catch { setNeedsClick(true); }
+    }
+  }, []);
 
   const pct = duration > 0 ? (currentTime / duration) * 100 : 0;
 
@@ -298,33 +240,34 @@ export function MusicVideoPlayer({ videoId, title, onPrev, onNext, hasPrev = fal
         boxShadow: "0 0 0 1px rgba(127,119,221,0.15), 0 20px 60px rgba(0,0,0,0.8)",
       }}
     >
-      {/* YouTube iframe container — placed here; YT API replaces this div */}
-      <div
-        id={iframeContainerId}
+      {/* Native video element — no YouTube iframe */}
+      <video
+        ref={videoRef}
+        src={streamSrc}
+        preload="auto"
+        playsInline
         style={{
           position: "absolute", inset: 0,
           width: "100%", height: "100%",
-          pointerEvents: "none",
+          objectFit: "contain", background: "#000",
+          display: "block",
         }}
       />
 
-      {/* Invisible click-shield over the iframe (prevents default YT click behaviour) */}
+      {/* Invisible click-shield (prevents native controls from showing) */}
       <div
-        style={{
-          position: "absolute", inset: 0,
-          zIndex: 1, cursor: showControls ? "default" : "none",
-        }}
+        style={{ position: "absolute", inset: 0, zIndex: 1, cursor: showControls ? "default" : "none" }}
         onClick={togglePlay}
         onMouseMove={resetHideTimer}
       />
 
-      {/* Loading spinner */}
-      {!ready && !playerError && (
+      {/* Buffering spinner */}
+      {buffering && !playerError && !needsClick && (
         <div style={{
           position: "absolute", inset: 0, zIndex: 2,
           display: "flex", flexDirection: "column",
           alignItems: "center", justifyContent: "center",
-          gap: 16, background: "rgba(5,5,12,0.9)",
+          gap: 16, background: "rgba(5,5,12,0.7)",
           pointerEvents: "none",
         }}>
           <div style={{
@@ -333,10 +276,7 @@ export function MusicVideoPlayer({ videoId, title, onPrev, onNext, hasPrev = fal
             borderTopColor: "#7F77DD",
             animation: "mv-spin 0.75s linear infinite",
           }} />
-          <span style={{
-            color: "rgba(192,189,245,0.55)", fontSize: 13,
-            letterSpacing: "0.06em", fontFamily: "DM Sans, sans-serif",
-          }}>
+          <span style={{ color: "rgba(192,189,245,0.55)", fontSize: 13, letterSpacing: "0.06em" }}>
             Loading…
           </span>
         </div>
@@ -360,17 +300,37 @@ export function MusicVideoPlayer({ videoId, title, onPrev, onNext, hasPrev = fal
             display: "flex", alignItems: "center", justifyContent: "center",
             fontSize: 24, opacity: 0.8,
           }}>⚠</div>
-          <div style={{
-            color: "rgba(255,255,255,0.45)", fontSize: 14,
-            fontFamily: "DM Sans, sans-serif", textAlign: "center",
-          }}>
-            This video isn't available for playback
+          <div style={{ color: "rgba(255,255,255,0.45)", fontSize: 14, textAlign: "center" }}>
+            This video isn't available for direct playback
           </div>
         </div>
       )}
 
-      {/* Big play icon when paused */}
-      {ready && !playing && !playerError && (
+      {/* Click-to-play overlay */}
+      {needsClick && !playerError && (
+        <div
+          style={{
+            position: "absolute", inset: 0, zIndex: 4,
+            display: "flex", flexDirection: "column",
+            alignItems: "center", justifyContent: "center",
+            gap: 14, background: "rgba(5,5,12,0.65)", cursor: "pointer",
+          }}
+          onClick={(e) => { e.stopPropagation(); startPlay(); }}
+        >
+          <div style={{
+            width: 80, height: 80, borderRadius: "50%",
+            background: "rgba(127,119,221,0.9)", backdropFilter: "blur(10px)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            boxShadow: "0 0 60px rgba(127,119,221,0.55)",
+          }}>
+            <Play size={36} color="#fff" fill="#fff" style={{ marginLeft: 6 }} />
+          </div>
+          <span style={{ color: "rgba(255,255,255,0.7)", fontSize: 14 }}>Tap to play</span>
+        </div>
+      )}
+
+      {/* Big play icon when paused and ready */}
+      {!playing && !buffering && !playerError && !needsClick && (
         <div style={{
           position: "absolute", inset: 0, zIndex: 2,
           display: "flex", alignItems: "center", justifyContent: "center",
@@ -378,14 +338,32 @@ export function MusicVideoPlayer({ videoId, title, onPrev, onNext, hasPrev = fal
         }}>
           <div style={{
             width: 80, height: 80, borderRadius: "50%",
-            background: "rgba(127,119,221,0.82)",
-            backdropFilter: "blur(10px)",
+            background: "rgba(127,119,221,0.82)", backdropFilter: "blur(10px)",
             display: "flex", alignItems: "center", justifyContent: "center",
             boxShadow: "0 0 60px rgba(127,119,221,0.55), 0 0 120px rgba(127,119,221,0.2)",
           }}>
             <Play size={36} color="#fff" fill="#fff" style={{ marginLeft: 6 }} />
           </div>
         </div>
+      )}
+
+      {/* Unmute button */}
+      {muted && !needsClick && !playerError && playing && (
+        <button
+          style={{
+            position: "absolute", bottom: 72, right: 18, zIndex: 5,
+            display: "flex", alignItems: "center", gap: 8,
+            padding: "10px 18px", borderRadius: 24,
+            background: "rgba(127,119,221,0.88)", backdropFilter: "blur(12px)",
+            border: "1px solid rgba(192,189,245,0.3)", color: "#fff",
+            fontSize: 13, fontWeight: 600, fontFamily: "'DM Sans', sans-serif",
+            cursor: "pointer", boxShadow: "0 4px 20px rgba(127,119,221,0.4)",
+          }}
+          onClick={(e) => { e.stopPropagation(); toggleMute(); }}
+        >
+          <VolumeX size={16} />
+          Tap to unmute
+        </button>
       )}
 
       {/* Controls overlay */}
@@ -454,14 +432,16 @@ export function MusicVideoPlayer({ videoId, title, onPrev, onNext, hasPrev = fal
 
           {/* Play/Pause */}
           <button
-            onClick={togglePlay}
+            onClick={(e) => { e.stopPropagation(); togglePlay(); }}
             style={{
               background: "none", border: "none", color: "#fff",
               cursor: "pointer", padding: "4px 6px",
               display: "flex", alignItems: "center", borderRadius: 6,
             }}
           >
-            {playing ? <Pause size={22} fill="#fff" /> : <Play size={22} fill="#fff" style={{ marginLeft: 2 }} />}
+            {playing
+              ? <Pause size={22} fill="#fff" />
+              : <Play  size={22} fill="#fff" style={{ marginLeft: 2 }} />}
           </button>
 
           {/* Next */}
@@ -490,7 +470,7 @@ export function MusicVideoPlayer({ videoId, title, onPrev, onNext, hasPrev = fal
           <div style={{ flex: 1 }} />
 
           <button
-            onClick={toggleMute}
+            onClick={(e) => { e.stopPropagation(); toggleMute(); }}
             style={{
               background: "none", border: "none",
               color: "rgba(255,255,255,0.75)", cursor: "pointer",
@@ -499,17 +479,19 @@ export function MusicVideoPlayer({ videoId, title, onPrev, onNext, hasPrev = fal
           >
             {muted ? <VolumeX size={19} /> : <Volume2 size={19} />}
           </button>
+
           <input
-            type="range" min={0} max={100} step={1}
+            type="range" min={0} max={1} step={0.01}
             value={muted ? 0 : volume}
+            onClick={(e) => e.stopPropagation()}
             onChange={(e) => {
-              const val = parseInt(e.target.value);
-              const p = playerRef.current;
-              if (!p) return;
-              p.setVolume(val);
-              if (val === 0) { p.mute(); setMuted(true); }
-              else if (muted) { p.unMute(); setMuted(false); }
+              const v   = videoRef.current;
+              const val = parseFloat(e.target.value);
+              if (!v) return;
+              v.volume = val;
+              v.muted  = val === 0;
               setVolume(val);
+              setMuted(val === 0);
             }}
             style={{ width: 80, accentColor: "#7F77DD", cursor: "pointer" }}
           />
@@ -532,7 +514,7 @@ export function MusicVideoPlayer({ videoId, title, onPrev, onNext, hasPrev = fal
           </button>
 
           <button
-            onClick={toggleFullscreen}
+            onClick={(e) => { e.stopPropagation(); toggleFullscreen(); }}
             style={{
               background: "none", border: "none",
               color: "rgba(255,255,255,0.75)", cursor: "pointer",
@@ -546,11 +528,6 @@ export function MusicVideoPlayer({ videoId, title, onPrev, onNext, hasPrev = fal
 
       <style>{`
         @keyframes mv-spin { to { transform: rotate(360deg); } }
-        #${iframeContainerId} iframe {
-          width: 100% !important;
-          height: 100% !important;
-          border: none !important;
-        }
       `}</style>
     </div>
   );

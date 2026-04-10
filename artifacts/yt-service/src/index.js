@@ -259,77 +259,59 @@ app.get("/api/yt/music/stream", async (req, res) => {
 });
 
 /**
- * GET /api/yt/video/stream?videoId=xxx
+ * GET /api/yt/video/stream?videoId=xxx[&quality=720p|360p|best]
  *
- * Proxies muxed video+audio (itag 22 = 720p MP4, itag 18 = 360p MP4) to
- * the browser. Deciphers the format URL via YouTube.js player, then fetches
- * from YouTube CDN with full range-request support for seeking.
+ * Streams muxed video+audio via YouTube.js native download() — same
+ * approach as the working audio stream, avoids CDN 403s from URL-decipher
+ * proxying. Falls back to best quality if preferred quality not found.
+ *
+ * Supports Range requests for scrubbing/seeking.
  */
 app.get("/api/yt/video/stream", async (req, res) => {
-  const { videoId } = req.query;
+  const { videoId, quality = "720p" } = req.query;
   if (!videoId) return res.status(400).json({ error: "videoId required" });
 
   try {
-    const yt = await getYT();
-    const info = await getVideoInfo(videoId);
-    const muxedFormats = info.streaming_data?.formats || [];
+    // Use regular yt.getInfo() — has muxed video+audio formats (music info only has audio)
+    const videoInfo = await getVideoInfo(videoId);
 
-    const fmt = muxedFormats.find((f) => f.itag === 22)
-             || muxedFormats.find((f) => f.itag === 18);
-
-    if (!fmt) {
-      const itags = muxedFormats.map((f) => f.itag).join(",");
-      console.error(`[video/stream] no muxed format for ${videoId}. itags=${itags}`);
-      return res.status(404).json({ error: "No muxed video format available" });
-    }
-
-    // Decipher the URL (handles signature cipher + n-param transform)
-    const cdnUrl = await fmt.decipher(yt.session?.player);
-    if (!cdnUrl) return res.status(404).json({ error: "Decipher returned empty URL" });
-
-    const mimeType = fmt.mime_type?.split(";")[0] || "video/mp4";
-    const totalLength = fmt.content_length ? parseInt(fmt.content_length, 10) : null;
     const rangeHeader = req.headers["range"];
-
-    const upstreamHeaders = {
-      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-      "Referer": "https://www.youtube.com/",
-      "Origin": "https://www.youtube.com",
-      "Accept": "*/*",
+    // Only muxed (video+audio) formats exist at 360p (itag 18). Adaptive-only
+    // formats are video-only; there is no muxed 720p. Always pick "best" to
+    // select the highest-quality muxed stream that actually has audio.
+    const downloadOpts = {
+      type: "video+audio",
+      quality: "best",
+      format: "any",
     };
-    if (rangeHeader) upstreamHeaders["Range"] = rangeHeader;
 
-    console.log(`[video/stream] ${videoId} itag=${fmt.itag} range=${rangeHeader || "none"}`);
-
-    const upstream = await fetch(cdnUrl, { headers: upstreamHeaders });
-
-    if (!upstream.ok && upstream.status !== 206) {
-      console.error(`[video/stream] CDN ${upstream.status} for ${videoId}`);
-      return res.status(502).json({ error: `CDN returned ${upstream.status}` });
+    if (rangeHeader) {
+      const [, start, end] = /bytes=(\d+)-(\d*)/.exec(rangeHeader) || [];
+      if (start !== undefined) {
+        downloadOpts.range = {
+          start: parseInt(start, 10),
+          end: end ? parseInt(end, 10) : undefined,
+        };
+      }
     }
+
+    console.log(`[video/stream] ${videoId} quality=${quality} range=${rangeHeader || "none"}`);
+
+    const stream = await videoInfo.download(downloadOpts);
+
+    // Determine mime type from streaming data (prefer muxed format)
+    const sd = videoInfo.streaming_data;
+    const videoFmt = (sd?.formats || []).find((f) => f.has_video && f.has_audio)
+                  || (sd?.adaptive_formats || []).find((f) => f.has_video);
+    const mimeType = videoFmt?.mime_type?.split(";")[0] || "video/mp4";
 
     res.setHeader("Content-Type", mimeType);
     res.setHeader("Accept-Ranges", "bytes");
     res.setHeader("Access-Control-Allow-Origin", "*");
     res.setHeader("Cache-Control", "no-store");
+    res.status(rangeHeader ? 206 : 200);
 
-    const upLen = upstream.headers.get("content-length");
-    if (upLen) res.setHeader("Content-Length", upLen);
-
-    const upRange = upstream.headers.get("content-range");
-    if (upRange) res.setHeader("Content-Range", upRange);
-
-    res.status(upstream.status === 206 ? 206 : 200);
-
-    const reader = upstream.body.getReader();
-    const pump = () => reader.read().then(({ done, value }) => {
-      if (done) { res.end(); return; }
-      const ok = res.write(value);
-      if (ok) pump();
-      else res.once("drain", pump);
-    }).catch((e) => { console.error("[video/stream] pipe error:", e.message); res.destroy(); });
-    pump();
-    req.on("close", () => reader.cancel().catch(() => {}));
+    await pipeReadableStream(stream, res);
   } catch (err) {
     console.error("[video/stream] error:", err.message);
     if (!res.headersSent) res.status(500).json({ error: err.message });
@@ -927,6 +909,31 @@ app.get("/api/yt/video/url", async (req, res) => {
     });
   } catch (err) {
     console.error("[video/url] error:", err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─── Format Debug ─────────────────────────────────────────────────────────────
+
+app.get("/api/yt/debug/formats", async (req, res) => {
+  const { videoId } = req.query;
+  if (!videoId) return res.status(400).json({ error: "videoId required" });
+  try {
+    const info = await getVideoInfo(videoId);
+    const sd = info.streaming_data;
+    res.json({
+      formats: (sd?.formats || []).map((f) => ({
+        itag: f.itag, mime: f.mime_type?.split(";")[0],
+        has_video: f.has_video, has_audio: f.has_audio,
+        quality: f.quality_label || f.quality, bitrate: f.bitrate,
+      })),
+      adaptive: (sd?.adaptive_formats || []).slice(0, 5).map((f) => ({
+        itag: f.itag, mime: f.mime_type?.split(";")[0],
+        has_video: f.has_video, has_audio: f.has_audio,
+        quality: f.quality_label || f.quality,
+      })),
+    });
+  } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
