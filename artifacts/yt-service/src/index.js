@@ -791,37 +791,39 @@ app.get("/api/yt/info/:videoId", async (req, res) => {
       });
     }
 
-    // If watch_next_feed gave us nothing, fall back to YT Music related tracks
-    // but filter to music VIDEO types only (skip audio-only tracks)
+    // If watch_next_feed gave us nothing, fall back to a YouTube video search
+    // using the video title so we get real video thumbnails, not album art.
     if (related.length === 0) {
       try {
         const yt = await getYT();
-        const musicRelated = await yt.music.getRelated(videoId);
-        for (const shelf of musicRelated?.contents ?? []) {
-          if (shelf.type !== "MusicCarouselShelf") continue;
-          for (const item of shelf.contents ?? []) {
-            if (related.length >= 20) break;
-            const id = item.id ?? item.video_id ?? "";
-            if (!id) continue;
-            // Skip audio-only track types
-            if (item.video_type && AUDIO_ONLY_TYPES.has(item.video_type)) continue;
-            const title =
-              (typeof item.title === "object" ? item.title?.text : item.title) ?? "";
-            if (!title) continue;
-            related.push({
-              id,
-              title,
-              author: item.artists?.[0]?.name ?? item.author?.name ?? "",
-              duration: item.duration?.text ?? "",
-              thumbnail:
-                item.thumbnail?.contents?.[0]?.url ??
-                item.thumbnails?.[0]?.url ??
-                `https://i.ytimg.com/vi/${id}/hqdefault.jpg`,
-              views: "",
-              publishedAt: "",
-            });
-          }
+        const searchQuery = [basic.title, basic.channel?.name ?? basic.author]
+          .filter(Boolean).join(" ") || "official music video";
+        const searchResults = await yt.search(searchQuery, { type: "video" });
+        for (const item of searchResults.videos ?? []) {
           if (related.length >= 20) break;
+          if (item.type !== "Video") continue;
+          const id = item.id;
+          if (!id || id === videoId) continue;
+          const title =
+            (typeof item.title === "object" ? item.title?.text : item.title) ?? "";
+          if (!title) continue;
+          related.push({
+            id,
+            title,
+            author:
+              item.author?.name ??
+              (typeof item.short_byline_text === "object"
+                ? item.short_byline_text?.text
+                : item.short_byline_text) ??
+              "",
+            duration: item.duration?.text ?? "",
+            thumbnail:
+              item.best_thumbnail?.url ??
+              item.thumbnails?.[0]?.url ??
+              `https://i.ytimg.com/vi/${id}/hqdefault.jpg`,
+            views: item.view_count?.text ?? item.short_view_count?.text ?? "",
+            publishedAt: item.published?.text ?? "",
+          });
         }
       } catch {
         // Related is non-critical — ignore errors
