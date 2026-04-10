@@ -82,11 +82,17 @@ async function getYT() {
 
 // ─── TrackInfo Cache ──────────────────────────────────────────────────────────
 //
-// Caching TrackInfo avoids making a new API call on every Range request for the
-// same video (e.g., during seek). TTL = 5 minutes.
+// TrackInfo/VideoInfo caches:
+//  TRACK_CACHE — music metadata, 5-min TTL (info only, no format URLs)
+//  VIDEO_CACHE — VideoInfo for /info and /stream, 30-sec TTL
+//    30s is long enough for a browser's multi-range playback requests to reuse
+//    the same format URL, but short enough that format URLs are refreshed for
+//    each new playback session.
 
 const TRACK_CACHE = new Map(); // videoId → { trackInfo, expiresAt }
+const VIDEO_CACHE = new Map(); // videoId → { videoInfo, expiresAt }
 const TRACK_TTL_MS = 5 * 60 * 1000;
+const VIDEO_TTL_MS = 30 * 1000; // 30 seconds
 
 async function getTrackInfo(videoId) {
   const now = Date.now();
@@ -96,6 +102,20 @@ async function getTrackInfo(videoId) {
   const trackInfo = await yt.music.getInfo(videoId);
   TRACK_CACHE.set(videoId, { trackInfo, expiresAt: now + TRACK_TTL_MS });
   return trackInfo;
+}
+
+/**
+ * Get regular YouTube VideoInfo (not music-focused) — has proper muxed video formats.
+ * Used for video streaming (/video/stream) and metadata (/info/:videoId).
+ */
+async function getVideoInfo(videoId) {
+  const now = Date.now();
+  const cached = VIDEO_CACHE.get(videoId);
+  if (cached && cached.expiresAt > now) return cached.videoInfo;
+  const yt = await getYT();
+  const videoInfo = await yt.getInfo(videoId);
+  VIDEO_CACHE.set(videoId, { videoInfo, expiresAt: now + VIDEO_TTL_MS });
+  return videoInfo;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -241,43 +261,88 @@ app.get("/api/yt/music/stream", async (req, res) => {
 /**
  * GET /api/yt/video/stream?videoId=xxx
  *
- * Muxed video+audio stream (itag 18 = 360p MP4, itag 22 = 720p MP4).
- * Used by the custom MusicVideoPlayer component.
- * Supports Range requests.
+ * Muxed video+audio stream (itag 22 = 720p MP4, itag 18 = 360p MP4).
+ *
+ * Uses yt.getInfo() for proper muxed format metadata, then proxies the
+ * deciphered format URL directly via fetch() with YouTube-compatible headers.
+ * This bypasses YouTube.js's download() which can fail on server IPs.
+ *
+ * Sets Content-Range + Content-Length on all Range responses for proper
+ * browser <video> seeking and duration detection.
  */
 app.get("/api/yt/video/stream", async (req, res) => {
   const { videoId } = req.query;
   if (!videoId) return res.status(400).json({ error: "videoId required" });
 
   try {
-    const trackInfo = await getTrackInfo(videoId);
+    const yt = await getYT();
+    // Use a short-lived cache (30s) so multiple range requests within the same
+    // playback session reuse the same VideoInfo and format URL, which is what
+    // YouTube's CDN expects (same URL, sequential range requests).
+    const info = await getVideoInfo(videoId);
 
-    const rangeHeader = req.headers["range"];
-    let downloadOpts = { itag: 22 }; // prefer 720p, falls back inside library
-    if (rangeHeader) {
-      const [, start, end] = /bytes=(\d+)-(\d*)/.exec(rangeHeader) || [];
-      if (start !== undefined) {
-        downloadOpts.range = {
-          start: parseInt(start, 10),
-          end: end ? parseInt(end, 10) : undefined,
-        };
-      }
+    const sd = info.streaming_data;
+    const muxedFormats = sd?.formats || [];
+
+    // Prefer 720p muxed, fall back to 360p muxed
+    const fmt = muxedFormats.find((f) => f.itag === 22)
+             || muxedFormats.find((f) => f.itag === 18);
+
+    if (!fmt) {
+      console.error(`[stream/video] no muxed format for ${videoId}. Available itags: ${muxedFormats.map(f=>f.itag).join(',')}`);
+      return res.status(404).json({ error: "No muxed video format available for this video" });
     }
 
+    const totalLength = fmt.content_length ? parseInt(fmt.content_length, 10) : null;
+    const rangeHeader = req.headers["range"];
+
+    // Parse range header to pass as options to download()
+    let rangeStart = 0;
+    let rangeEnd = totalLength !== null ? totalLength - 1 : undefined;
+
+    if (rangeHeader) {
+      const m = /bytes=(\d+)-(\d*)/.exec(rangeHeader);
+      rangeStart = m ? parseInt(m[1], 10) : 0;
+      if (m && m[2]) rangeEnd = parseInt(m[2], 10);
+    }
+
+    // YouTube.js's range-based download path (using &range= URL param) is
+    // what actually works from server IPs — the full-download path (no range)
+    // gets 403. Always pass a range to force the range-based code path.
+    const downloadOpts = {
+      itag: fmt.itag,
+      range: { start: rangeStart, end: rangeEnd },
+    };
+
+    // Try download — if it fails (stale cached URL), clear cache and retry once.
     let stream;
     try {
-      stream = await trackInfo.download(downloadOpts);
-    } catch {
-      // 720p not available — fall back to 360p
-      downloadOpts = { itag: 18, ...(downloadOpts.range ? { range: downloadOpts.range } : {}) };
-      stream = await trackInfo.download(downloadOpts);
+      stream = await info.download(downloadOpts);
+    } catch (dlErr) {
+      if (dlErr.message?.includes("non 2xx")) {
+        VIDEO_CACHE.delete(videoId);
+        const freshInfo = await getVideoInfo(videoId);
+        stream = await freshInfo.download(downloadOpts);
+      } else {
+        throw dlErr;
+      }
     }
 
     res.setHeader("Content-Type", "video/mp4");
     res.setHeader("Accept-Ranges", "bytes");
     res.setHeader("Access-Control-Allow-Origin", "*");
     res.setHeader("Cache-Control", "no-store");
-    res.status(rangeHeader ? 206 : 200);
+
+    if (rangeHeader && totalLength !== null && rangeEnd !== undefined) {
+      res.setHeader("Content-Range", `bytes ${rangeStart}-${rangeEnd}/${totalLength}`);
+      res.setHeader("Content-Length", rangeEnd - rangeStart + 1);
+      res.status(206);
+    } else if (totalLength !== null) {
+      res.setHeader("Content-Length", totalLength);
+      res.status(200);
+    } else {
+      res.status(200);
+    }
 
     await pipeReadableStream(stream, res);
   } catch (err) {
@@ -689,31 +754,83 @@ app.get("/api/yt/videos", async (req, res) => {
 /**
  * GET /api/yt/info/:videoId
  * Full video info + related videos.
+ * Uses the VIDEO_CACHE so the same VideoInfo object powers both this endpoint
+ * and the /video/stream endpoint without duplicate API calls.
  */
 app.get("/api/yt/info/:videoId", async (req, res) => {
   try {
     const { videoId } = req.params;
-    const yt = await getYT();
-    const info = await yt.getInfo(videoId);
+    // Use cached VideoInfo (shared with video stream endpoint)
+    const info = await getVideoInfo(videoId);
     const basic = info.basic_info ?? {};
+
+    // Collect related from watch_next_feed — accept any item that has an id
+    // and looks like a video (broad check to handle YouTube.js version differences)
     const related = [];
     for (const item of info.watch_next_feed ?? []) {
-      if (
-        (item.type === "CompactVideo" || item.type === "Video") &&
-        item.id &&
-        related.length < 20
-      ) {
-        related.push({
-          id: item.id,
-          title: item.title?.text ?? "",
-          author: item.author?.name ?? item.short_byline_text?.text ?? "",
-          duration: item.duration?.text ?? "",
-          thumbnail: item.best_thumbnail?.url ?? item.thumbnails?.[0]?.url ?? "",
-          views: item.view_count?.text ?? item.short_view_count?.text ?? "",
-          publishedAt: item.published?.text ?? "",
-        });
+      if (related.length >= 20) break;
+      const id = item.id ?? item.video_id;
+      if (!id) continue;
+      const title =
+        (typeof item.title === "object" ? item.title?.text : item.title) ?? "";
+      if (!title) continue;
+      related.push({
+        id,
+        title,
+        author:
+          item.author?.name ??
+          (typeof item.short_byline_text === "object"
+            ? item.short_byline_text?.text
+            : item.short_byline_text) ??
+          "",
+        duration: item.duration?.text ?? "",
+        thumbnail:
+          item.best_thumbnail?.url ??
+          item.thumbnails?.[0]?.url ??
+          item.thumbnail?.contents?.[0]?.url ??
+          `https://i.ytimg.com/vi/${id}/hqdefault.jpg`,
+        views:
+          item.view_count?.text ??
+          item.short_view_count?.text ??
+          "",
+        publishedAt: item.published?.text ?? "",
+      });
+    }
+
+    // If watch_next_feed gave us nothing, fall back to YT Music related tracks
+    if (related.length === 0) {
+      try {
+        const yt = await getYT();
+        const musicRelated = await yt.music.getRelated(videoId);
+        for (const shelf of musicRelated?.contents ?? []) {
+          if (shelf.type !== "MusicCarouselShelf") continue;
+          for (const item of shelf.contents ?? []) {
+            if (related.length >= 20) break;
+            const id = item.id ?? item.video_id ?? "";
+            if (!id) continue;
+            const title =
+              (typeof item.title === "object" ? item.title?.text : item.title) ?? "";
+            if (!title) continue;
+            related.push({
+              id,
+              title,
+              author: item.artists?.[0]?.name ?? item.author?.name ?? "",
+              duration: item.duration?.text ?? "",
+              thumbnail:
+                item.thumbnail?.contents?.[0]?.url ??
+                item.thumbnails?.[0]?.url ??
+                `https://i.ytimg.com/vi/${id}/hqdefault.jpg`,
+              views: "",
+              publishedAt: "",
+            });
+          }
+          if (related.length >= 20) break;
+        }
+      } catch {
+        // Related is non-critical — ignore errors
       }
     }
+
     res.json({
       id: videoId,
       title: basic.title ?? "",
@@ -723,7 +840,9 @@ app.get("/api/yt/info/:videoId", async (req, res) => {
       publishedAt: basic.start_timestamp ?? "",
       description: basic.short_description ?? "",
       keywords: basic.keywords ?? [],
-      thumbnail: basic.thumbnail?.[0]?.url ?? "",
+      thumbnail:
+        basic.thumbnail?.[0]?.url ??
+        `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
       duration: basic.duration ?? 0,
       related,
     });
@@ -784,6 +903,7 @@ app.get("/api/yt/health", (_req, res) => {
     status: "ok",
     yt_ready: _yt !== null,
     track_cache_size: TRACK_CACHE.size,
+    video_cache_size: VIDEO_CACHE.size,
   });
 });
 

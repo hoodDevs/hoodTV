@@ -214,7 +214,13 @@ export function MusicVideoWatchPage() {
                   )}
                   {info.publishedAt && (
                     <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14, fontWeight: 600, color: "#aaa" }}>
-                      <Clock size={18} color="#7F77DD" /> {info.publishedAt}
+                      <Clock size={18} color="#7F77DD" /> {(() => {
+                        try {
+                          return new Date(info.publishedAt).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
+                        } catch {
+                          return info.publishedAt;
+                        }
+                      })()}
                     </div>
                   )}
                 </div>
