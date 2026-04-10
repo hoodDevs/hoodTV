@@ -37,52 +37,44 @@ async function fetchVideoInfo(videoId: string): Promise<VideoInfo> {
 }
 
 function RelatedCard({ video, onClick }: { video: RelatedVideo; onClick: () => void }) {
+  const [hovered, setHovered] = useState(false);
   return (
-    <motion.div
-      whileHover={{ backgroundColor: "rgba(255,255,255,0.03)", x: 4 }}
+    <div
       onClick={onClick}
-      style={{
-        display: "flex", gap: 12, cursor: "pointer", padding: "8px", borderRadius: 12, transition: "background 0.2s"
-      }}
-      className="group"
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{ display: "flex", gap: 12, cursor: "pointer" }}
     >
-      <div style={{ position: "relative", flexShrink: 0, width: 168, height: 94, borderRadius: 8, overflow: "hidden", background: "#111", border: "1px solid rgba(255,255,255,0.05)" }}>
+      <div style={{ position: "relative", flexShrink: 0, width: 160, height: 90, borderRadius: 8, overflow: "hidden", background: "#111",
+        transform: hovered ? "scale(1.03)" : "scale(1)", transition: "transform 0.25s ease" }}>
         <img
           src={video.thumbnail}
           alt={video.title}
-          style={{ width: "100%", height: "100%", objectFit: "cover", transition: "transform 0.4s ease" }}
-          className="group-hover:scale-105"
+          style={{ width: "100%", height: "100%", objectFit: "cover" }}
           loading="lazy"
         />
         {video.duration && (
-          <div
-            style={{
-              position: "absolute", bottom: 6, right: 6,
-              background: "rgba(0,0,0,0.8)", backdropFilter: "blur(4px)",
-              color: "#fff", fontSize: 11, fontWeight: 700, padding: "2px 6px", borderRadius: 4, fontFamily: "monospace",
-            }}
-          >
+          <span style={{
+            position: "absolute", bottom: 5, right: 5,
+            background: "rgba(0,0,0,0.85)", color: "#fff",
+            fontSize: 11, fontWeight: 700, padding: "2px 5px", borderRadius: 4, fontFamily: "monospace",
+          }}>
             {video.duration}
-          </div>
+          </span>
         )}
       </div>
-      <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", justifyContent: "center" }}>
-        <div
-          style={{
-            fontSize: 14, fontWeight: 600, color: "#e0e0e0", lineHeight: 1.4,
-            display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden", marginBottom: 6,
-            transition: "color 0.2s"
-          }}
-          className="group-hover:text-[#c0bdf5]"
-        >
+      <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", justifyContent: "center", gap: 4 }}>
+        <div style={{
+          fontSize: 13, fontWeight: 600, lineHeight: 1.4,
+          color: hovered ? "#c0bdf5" : "#e0e0e0",
+          display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden",
+          transition: "color 0.2s",
+        }}>
           {video.title}
         </div>
-        <div style={{ fontSize: 12, color: "#888", marginBottom: 4 }}>{video.author}</div>
-        <div style={{ fontSize: 11, color: "#555" }}>
-          {video.views}{video.views && video.publishedAt ? " · " : ""}{video.publishedAt}
-        </div>
+        <div style={{ fontSize: 12, color: "#666" }}>{video.author}</div>
       </div>
-    </motion.div>
+    </div>
   );
 }
 
@@ -418,7 +410,7 @@ export function MusicVideoWatchPage() {
             initial={{ opacity: 0, x: 20 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ delay: 0.3, duration: 0.5 }}
-            style={{ paddingLeft: 16, display: "flex", flexDirection: "column", gap: 8 }}
+            style={{ paddingLeft: 16, display: "flex", flexDirection: "column", gap: 16 }}
           >
             {(info?.related ?? []).map((v) => (
               <RelatedCard
