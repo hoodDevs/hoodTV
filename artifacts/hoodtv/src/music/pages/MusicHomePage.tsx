@@ -1,9 +1,11 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
-import { Search, Sparkles } from "lucide-react";
+import { Search, Sparkles, History, Heart } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import type { YtVideo } from "./MusicVideosPage";
+import { useMusicVideoHistory } from "@/hooks/useMusicVideoHistory";
+import { useMusicVideoFavorites } from "@/hooks/useMusicVideoFavorites";
 import {
   recordChipClick,
   recordChipLeave,
@@ -249,6 +251,9 @@ export function MusicHomePage() {
     refreshState();
   };
 
+  const { history } = useMusicVideoHistory();
+  const { favorites } = useMusicVideoFavorites();
+
   const handleVideoClick = (video: YtVideo) => {
     recordVideoClick(video.id, video.title, video.author, video.publishedAt);
     refreshState();
@@ -362,6 +367,64 @@ export function MusicHomePage() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Recently Watched row */}
+      {!isSearching && history.length > 0 && (
+        <div style={{ padding: "20px 24px 4px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
+            <History size={14} color="#7F77DD" />
+            <span style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 18, letterSpacing: "0.06em", color: "#fff" }}>
+              Recently Watched
+            </span>
+          </div>
+          <div style={{ display: "flex", gap: 14, overflowX: "auto", scrollbarWidth: "none", paddingBottom: 4 }}>
+            {history.slice(0, 12).map((v) => (
+              <div
+                key={v.id}
+                onClick={() => navigate(`/music/videos/${v.id}`)}
+                style={{ flexShrink: 0, width: 200, cursor: "pointer" }}
+              >
+                <div style={{ position: "relative", width: 200, height: 112, borderRadius: 8, overflow: "hidden", background: "#111", marginBottom: 8 }}>
+                  <img src={v.thumbnail} alt={v.title} style={{ width: "100%", height: "100%", objectFit: "cover", transition: "transform 0.3s" }}
+                    onMouseEnter={(e) => (e.currentTarget.style.transform = "scale(1.05)")}
+                    onMouseLeave={(e) => (e.currentTarget.style.transform = "scale(1)")} />
+                </div>
+                <div style={{ fontSize: 12, fontWeight: 600, color: "#ddd", lineHeight: 1.3, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{v.title}</div>
+                <div style={{ fontSize: 11, color: "#666", marginTop: 3 }}>{v.author}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Favorites row */}
+      {!isSearching && favorites.length > 0 && (
+        <div style={{ padding: "16px 24px 4px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
+            <Heart size={14} color="#c0bdf5" fill="#c0bdf5" />
+            <span style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 18, letterSpacing: "0.06em", color: "#fff" }}>
+              My Favorites
+            </span>
+          </div>
+          <div style={{ display: "flex", gap: 14, overflowX: "auto", scrollbarWidth: "none", paddingBottom: 4 }}>
+            {favorites.slice(0, 12).map((v) => (
+              <div
+                key={v.id}
+                onClick={() => navigate(`/music/videos/${v.id}`)}
+                style={{ flexShrink: 0, width: 200, cursor: "pointer" }}
+              >
+                <div style={{ position: "relative", width: 200, height: 112, borderRadius: 8, overflow: "hidden", background: "#111", marginBottom: 8, border: "1px solid rgba(127,119,221,0.2)" }}>
+                  <img src={v.thumbnail} alt={v.title} style={{ width: "100%", height: "100%", objectFit: "cover", transition: "transform 0.3s" }}
+                    onMouseEnter={(e) => (e.currentTarget.style.transform = "scale(1.05)")}
+                    onMouseLeave={(e) => (e.currentTarget.style.transform = "scale(1)")} />
+                </div>
+                <div style={{ fontSize: 12, fontWeight: 600, color: "#ddd", lineHeight: 1.3, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{v.title}</div>
+                <div style={{ fontSize: 11, color: "#666", marginTop: 3 }}>{v.author}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Video grid */}
       <div style={{ padding: "20px 24px 40px" }}>

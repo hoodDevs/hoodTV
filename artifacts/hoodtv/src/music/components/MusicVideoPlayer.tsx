@@ -11,6 +11,9 @@ import {
   ExternalLink, SkipBack, SkipForward,
 } from "lucide-react";
 
+const SPEEDS = [0.75, 1, 1.25, 1.5, 2] as const;
+type Speed = typeof SPEEDS[number];
+
 interface Props {
   videoId: string;
   title?: string;
@@ -18,6 +21,7 @@ interface Props {
   onNext?: () => void;
   hasPrev?: boolean;
   hasNext?: boolean;
+  autoplayEnabled?: boolean;
 }
 
 declare global {
@@ -56,7 +60,7 @@ function loadYtApi(): Promise<void> {
   });
 }
 
-export function MusicVideoPlayer({ videoId, title, onPrev, onNext, hasPrev = false, hasNext = false }: Props) {
+export function MusicVideoPlayer({ videoId, title, onPrev, onNext, hasPrev = false, hasNext = false, autoplayEnabled = true }: Props) {
   const uid = useId().replace(/:/g, "");
   const iframeContainerId = `ytplayer-${uid}`;
 
@@ -76,6 +80,7 @@ export function MusicVideoPlayer({ videoId, title, onPrev, onNext, hasPrev = fal
   const [showControls, setShowControls] = useState(true);
   const [seeking, setSeeking] = useState(false);
   const [playerError, setPlayerError] = useState(false);
+  const [playbackRate, setPlaybackRate] = useState<Speed>(1);
 
   // Tick: update current time via RAF
   const startTick = useCallback(() => {
@@ -149,8 +154,7 @@ export function MusicVideoPlayer({ videoId, title, onPrev, onNext, hasPrev = fal
             else if (s === 2) { setPlaying(false); stopTick(); }
             else if (s === 0) {
               setPlaying(false); stopTick();
-              // Auto-advance to next video when this one ends
-              if (onNext) onNext();
+              if (autoplayEnabled && onNext) onNext();
             }
             if (s === 1 || s === 3) {
               const dur = e.target.getDuration?.() || 0;
@@ -216,6 +220,13 @@ export function MusicVideoPlayer({ videoId, title, onPrev, onNext, hasPrev = fal
     if (muted) { p.unMute(); setMuted(false); }
     else { p.mute(); setMuted(true); }
   }, [muted]);
+
+  const cycleSpeed = useCallback(() => {
+    const idx = SPEEDS.indexOf(playbackRate);
+    const next = SPEEDS[(idx + 1) % SPEEDS.length];
+    setPlaybackRate(next);
+    playerRef.current?.setPlaybackRate?.(next);
+  }, [playbackRate]);
 
   const toggleFullscreen = useCallback(async () => {
     const el = containerRef.current;
@@ -486,6 +497,23 @@ export function MusicVideoPlayer({ videoId, title, onPrev, onNext, hasPrev = fal
             }}
             style={{ width: 80, accentColor: "#7F77DD", cursor: "pointer" }}
           />
+
+          <button
+            onClick={(e) => { e.stopPropagation(); cycleSpeed(); }}
+            title="Playback speed"
+            style={{
+              background: "rgba(255,255,255,0.08)",
+              border: "1px solid rgba(255,255,255,0.12)",
+              color: playbackRate !== 1 ? "#c0bdf5" : "rgba(255,255,255,0.75)",
+              cursor: "pointer",
+              padding: "2px 8px", borderRadius: 6,
+              fontSize: 12, fontWeight: 700, fontFamily: "monospace",
+              letterSpacing: "0.03em",
+              transition: "color 0.15s, background 0.15s",
+            }}
+          >
+            {playbackRate === 1 ? "1×" : `${playbackRate}×`}
+          </button>
 
           <button
             onClick={toggleFullscreen}

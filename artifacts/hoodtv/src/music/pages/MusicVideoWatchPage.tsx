@@ -1,9 +1,11 @@
-import { useRef, useEffect, useCallback } from "react";
+import { useRef, useEffect, useCallback, useState } from "react";
 import { useParams, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, Eye, Clock, ExternalLink } from "lucide-react";
+import { ArrowLeft, Eye, Clock, ExternalLink, Heart, Maximize2, Minimize2, Repeat } from "lucide-react";
 import { motion } from "framer-motion";
 import { MusicVideoPlayer } from "../components/MusicVideoPlayer";
+import { useMusicVideoHistory } from "@/hooks/useMusicVideoHistory";
+import { useMusicVideoFavorites } from "@/hooks/useMusicVideoFavorites";
 
 interface VideoInfo {
   id: string;
@@ -110,6 +112,22 @@ export function MusicVideoWatchPage() {
     staleTime: 10 * 60 * 1000,
   });
 
+  const { record: recordHistory } = useMusicVideoHistory();
+  const { toggle: toggleFav, isFavorite } = useMusicVideoFavorites();
+
+  const [autoplay, setAutoplay] = useState<boolean>(() => {
+    try { return localStorage.getItem("hoodtv_autoplay") !== "false"; } catch { return true; }
+  });
+  const [theater, setTheater] = useState(false);
+
+  const toggleAutoplay = useCallback(() => {
+    setAutoplay((prev) => {
+      const next = !prev;
+      try { localStorage.setItem("hoodtv_autoplay", String(next)); } catch {}
+      return next;
+    });
+  }, []);
+
   const handlePrev = useCallback(() => {
     const prev = historyRef.current[historyRef.current.length - 1];
     if (prev) {
@@ -122,6 +140,17 @@ export function MusicVideoWatchPage() {
     const next = info?.related?.[0];
     if (next) navigate(`/music/videos/${next.id}`);
   }, [info, navigate]);
+
+  useEffect(() => {
+    if (info) {
+      recordHistory({
+        id: info.id,
+        title: info.title,
+        author: info.author,
+        thumbnail: info.thumbnail,
+      });
+    }
+  }, [info, recordHistory]);
 
   return (
     <div
@@ -157,28 +186,71 @@ export function MusicVideoWatchPage() {
           Cinema
         </span>
         
-        {info && (
-          <motion.a
-            whileHover={{ scale: 1.05, color: "#fff", backgroundColor: "rgba(255,255,255,0.1)" }}
+        <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8 }}>
+          {/* Autoplay toggle */}
+          <motion.button
+            whileHover={{ scale: 1.04 }}
             whileTap={{ scale: 0.95 }}
-            href={`https://www.youtube.com/watch?v=${videoId}`}
-            target="_blank"
-            rel="noopener noreferrer"
+            onClick={toggleAutoplay}
+            title={autoplay ? "Autoplay on" : "Autoplay off"}
             style={{
-              marginLeft: "auto", display: "flex", alignItems: "center", gap: 8,
-              fontSize: 13, fontWeight: 600, color: "#aaa", textDecoration: "none",
-              background: "rgba(255,255,255,0.05)", padding: "8px 16px", borderRadius: 20, border: "1px solid rgba(255,255,255,0.1)", transition: "all 0.2s"
+              display: "flex", alignItems: "center", gap: 6,
+              fontSize: 12, fontWeight: 700, cursor: "pointer", letterSpacing: "0.04em",
+              background: autoplay ? "rgba(127,119,221,0.15)" : "rgba(255,255,255,0.05)",
+              border: `1px solid ${autoplay ? "rgba(127,119,221,0.4)" : "rgba(255,255,255,0.1)"}`,
+              color: autoplay ? "#c0bdf5" : "#666",
+              padding: "7px 14px", borderRadius: 20, transition: "all 0.2s",
             }}
           >
-            <ExternalLink size={16} /> Open in YouTube
-          </motion.a>
-        )}
+            <Repeat size={13} /> Autoplay
+          </motion.button>
+
+          {/* Theater mode toggle */}
+          <motion.button
+            whileHover={{ scale: 1.04 }}
+            whileTap={{ scale: 0.95 }}
+            onClick={() => setTheater((t) => !t)}
+            title={theater ? "Exit theater mode" : "Theater mode"}
+            style={{
+              display: "flex", alignItems: "center", gap: 6,
+              fontSize: 12, fontWeight: 700, cursor: "pointer", letterSpacing: "0.04em",
+              background: theater ? "rgba(127,119,221,0.15)" : "rgba(255,255,255,0.05)",
+              border: `1px solid ${theater ? "rgba(127,119,221,0.4)" : "rgba(255,255,255,0.1)"}`,
+              color: theater ? "#c0bdf5" : "#aaa",
+              padding: "7px 14px", borderRadius: 20, transition: "all 0.2s",
+            }}
+          >
+            {theater ? <Minimize2 size={13} /> : <Maximize2 size={13} />} Theater
+          </motion.button>
+
+          {info && (
+            <motion.a
+              whileHover={{ scale: 1.04, color: "#fff", backgroundColor: "rgba(255,255,255,0.1)" }}
+              whileTap={{ scale: 0.95 }}
+              href={`https://www.youtube.com/watch?v=${videoId}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{
+                display: "flex", alignItems: "center", gap: 8,
+                fontSize: 13, fontWeight: 600, color: "#aaa", textDecoration: "none",
+                background: "rgba(255,255,255,0.05)", padding: "8px 16px", borderRadius: 20, border: "1px solid rgba(255,255,255,0.1)", transition: "all 0.2s"
+              }}
+            >
+              <ExternalLink size={16} /> YouTube
+            </motion.a>
+          )}
+        </div>
       </div>
 
       <div
         style={{
-          display: "grid", gridTemplateColumns: "1fr 420px", gap: 0,
-          maxWidth: 1600, margin: "0 auto", alignItems: "start",
+          display: "grid",
+          gridTemplateColumns: theater ? "1fr" : "1fr 420px",
+          gap: 0,
+          maxWidth: theater ? "100%" : 1600,
+          margin: "0 auto",
+          alignItems: "start",
+          transition: "grid-template-columns 0.3s ease",
         }}
       >
         {/* Main column */}
@@ -203,6 +275,7 @@ export function MusicVideoWatchPage() {
               onNext={handleNext}
               hasPrev={historyRef.current.length > 0}
               hasNext={(info?.related?.length ?? 0) > 0}
+              autoplayEnabled={autoplay}
             />
           </motion.div>
 
@@ -237,9 +310,38 @@ export function MusicVideoWatchPage() {
                     {info.author?.[0]?.toUpperCase() ?? "?"}
                   </div>
                   <div>
-                    <div style={{ fontSize: 16, fontWeight: 700, color: "#fff", marginBottom: 2 }}>{info.author}</div>
+                    <div
+                      onClick={() => navigate(`/music/artist/${encodeURIComponent(info.author)}`)}
+                      style={{ fontSize: 16, fontWeight: 700, color: "#fff", marginBottom: 2, cursor: "pointer", transition: "color 0.2s" }}
+                      onMouseEnter={(e) => (e.currentTarget.style.color = "#c0bdf5")}
+                      onMouseLeave={(e) => (e.currentTarget.style.color = "#fff")}
+                    >
+                      {info.author}
+                    </div>
                     <div style={{ fontSize: 13, color: "#888" }}>Verified Channel</div>
                   </div>
+
+                  {/* Favorites button */}
+                  <motion.button
+                    whileHover={{ scale: 1.1 }}
+                    whileTap={{ scale: 0.9 }}
+                    onClick={() => toggleFav({ id: info.id, title: info.title, author: info.author, thumbnail: info.thumbnail })}
+                    title={isFavorite(info.id) ? "Remove from favorites" : "Add to favorites"}
+                    style={{
+                      marginLeft: 8,
+                      background: isFavorite(info.id) ? "rgba(127,119,221,0.15)" : "rgba(255,255,255,0.05)",
+                      border: `1px solid ${isFavorite(info.id) ? "rgba(127,119,221,0.4)" : "rgba(255,255,255,0.1)"}`,
+                      borderRadius: "50%", width: 40, height: 40,
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      cursor: "pointer", transition: "all 0.2s",
+                    }}
+                  >
+                    <Heart
+                      size={18}
+                      fill={isFavorite(info.id) ? "#c0bdf5" : "none"}
+                      color={isFavorite(info.id) ? "#c0bdf5" : "#888"}
+                    />
+                  </motion.button>
                 </div>
 
                 <div style={{ display: "flex", alignItems: "center", gap: 24, background: "rgba(255,255,255,0.03)", padding: "12px 24px", borderRadius: 16, border: "1px solid rgba(255,255,255,0.05)" }}>
@@ -282,8 +384,8 @@ export function MusicVideoWatchPage() {
           ) : null}
         </div>
 
-        {/* Related videos sidebar */}
-        <div style={{ padding: "32px 32px 32px 0", minHeight: "100vh" }}>
+        {/* Related videos sidebar — hidden in theater mode */}
+        {!theater && <div style={{ padding: "32px 32px 32px 0", minHeight: "100vh" }}>
           <h2 style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 24, color: "#fff", letterSpacing: "0.06em", marginBottom: 24, paddingLeft: 16 }}>
             Continue Watching
           </h2>
@@ -321,7 +423,7 @@ export function MusicVideoWatchPage() {
               />
             ))}
           </motion.div>
-        </div>
+        </div>}
       </div>
     </div>
   );
