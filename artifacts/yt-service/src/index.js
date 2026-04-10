@@ -761,6 +761,8 @@ app.get("/api/yt/info/:videoId", async (req, res) => {
       if (related.length >= 20) break;
       // Only accept proper video items, not music shelf items
       if (item.type && item.type !== "CompactVideo") continue;
+      // Skip audio-only tracks (album art + audio, no real video)
+      if (item.video_type && AUDIO_ONLY_TYPES.has(item.video_type)) continue;
       const id = item.id ?? item.video_id;
       if (!id) continue;
       const title =
