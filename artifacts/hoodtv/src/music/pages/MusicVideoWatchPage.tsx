@@ -279,27 +279,15 @@ export function MusicVideoWatchPage() {
 
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 24, paddingBottom: 32, borderBottom: "1px solid rgba(255,255,255,0.05)", marginBottom: 32 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-                  <div
-                    style={{
-                      width: 48, height: 48, borderRadius: "50%",
-                      background: "linear-gradient(135deg, #7F77DD, #9D97E8)",
-                      display: "flex", alignItems: "center", justifyContent: "center",
-                      fontSize: 18, fontWeight: 700, color: "#fff", flexShrink: 0,
-                      boxShadow: "0 4px 12px rgba(127,119,221,0.4)"
-                    }}
-                  >
-                    {info.author?.[0]?.toUpperCase() ?? "?"}
-                  </div>
                   <div>
                     <div
                       onClick={() => navigate(`/music/artist/${encodeURIComponent(info.author)}`)}
-                      style={{ fontSize: 16, fontWeight: 700, color: "#fff", marginBottom: 2, cursor: "pointer", transition: "color 0.2s" }}
+                      style={{ fontSize: 16, fontWeight: 700, color: "#fff", cursor: "pointer", transition: "color 0.2s" }}
                       onMouseEnter={(e) => (e.currentTarget.style.color = "#c0bdf5")}
                       onMouseLeave={(e) => (e.currentTarget.style.color = "#fff")}
                     >
                       {info.author}
                     </div>
-                    <div style={{ fontSize: 13, color: "#888" }}>Verified Channel</div>
                   </div>
 
                   {/* Favorites button */}
@@ -325,15 +313,15 @@ export function MusicVideoWatchPage() {
                   </motion.button>
                 </div>
 
-                <div style={{ display: "flex", alignItems: "center", gap: 24, background: "rgba(255,255,255,0.03)", padding: "12px 24px", borderRadius: 16, border: "1px solid rgba(255,255,255,0.05)" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 20 }}>
                   {info.views && (
-                    <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14, fontWeight: 600, color: "#aaa" }}>
-                      <Eye size={18} color="#7F77DD" /> {info.views}
+                    <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: "#666" }}>
+                      <Eye size={14} color="#555" /> {info.views}
                     </div>
                   )}
                   {info.publishedAt && (
-                    <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14, fontWeight: 600, color: "#aaa" }}>
-                      <Clock size={18} color="#7F77DD" /> {(() => {
+                    <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: "#666" }}>
+                      <Clock size={14} color="#555" /> {(() => {
                         try {
                           return new Date(info.publishedAt).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
                         } catch {

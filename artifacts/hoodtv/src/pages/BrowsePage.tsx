@@ -260,33 +260,35 @@ export default function BrowsePage({ type }: BrowsePageProps) {
 
       {/* Grid */}
       <div style={{ padding: "32px 40px 60px", maxWidth: "1400px", margin: "0 auto" }}>
-        {/* Active genre label */}
-        {selectedGenre && genres.length > 0 && (
+        {/* Label row — shows genre name + count, or just count */}
+        {!loading && filteredAndSorted.length > 0 && (
           <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "20px" }}>
-            <p style={{ fontSize: "12px", color: "#666" }}>
-              Showing{" "}
-              <span style={{ color: "#9D97E8", fontWeight: 500 }}>
-                {genres.find((g) => g.id === selectedGenre)?.name}
-              </span>
-              {" "}— {filteredAndSorted.length} title{filteredAndSorted.length !== 1 ? "s" : ""}
-            </p>
-            <button
-              onClick={() => setSelectedGenre(null)}
-              style={{
-                fontSize: "10px",
-                color: "#666",
-                background: "rgba(255,255,255,0.05)",
-                border: "1px solid rgba(255,255,255,0.08)",
-                borderRadius: "4px",
-                padding: "2px 8px",
-                cursor: "pointer",
-                transition: "color 0.2s",
-              }}
-              onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.color = "#f0f0f0"; }}
-              onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = "#666"; }}
-            >
-              Clear
-            </button>
+            {selectedGenre && genres.length > 0 ? (
+              <>
+                <p style={{ fontSize: "12px", color: "#666" }}>
+                  <span style={{ color: "#9D97E8", fontWeight: 500 }}>
+                    {genres.find((g) => g.id === selectedGenre)?.name}
+                  </span>
+                  {" "}— {filteredAndSorted.length} title{filteredAndSorted.length !== 1 ? "s" : ""}
+                </p>
+                <button
+                  onClick={() => setSelectedGenre(null)}
+                  style={{
+                    fontSize: "10px", color: "#666",
+                    background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)",
+                    borderRadius: "4px", padding: "2px 8px", cursor: "pointer", transition: "color 0.2s",
+                  }}
+                  onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.color = "#f0f0f0"; }}
+                  onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = "#666"; }}
+                >
+                  Clear
+                </button>
+              </>
+            ) : (
+              <p style={{ fontSize: "12px", color: "#444" }}>
+                {filteredAndSorted.length} title{filteredAndSorted.length !== 1 ? "s" : ""}
+              </p>
+            )}
           </div>
         )}
 
@@ -294,8 +296,8 @@ export default function BrowsePage({ type }: BrowsePageProps) {
           <div
             style={{
               display: "grid",
-              gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))",
-              gap: "16px",
+              gridTemplateColumns: "repeat(auto-fill, minmax(190px, 1fr))",
+              gap: "20px",
             }}
           >
             {Array.from({ length: 24 }).map((_, i) => (
@@ -323,8 +325,8 @@ export default function BrowsePage({ type }: BrowsePageProps) {
             <div
               style={{
                 display: "grid",
-                gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))",
-                gap: "16px",
+                gridTemplateColumns: "repeat(auto-fill, minmax(190px, 1fr))",
+                gap: "20px",
               }}
             >
               {filteredAndSorted.map((item) => (
